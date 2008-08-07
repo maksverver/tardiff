@@ -1,4 +1,4 @@
-CFLAGS=-Wall -Wextra -I. -g -O2
+CFLAGS=-Wall -Wextra -g -O2
 TARDIFF_OBJS=tardiff.o common.o
 TARPATCH_OBJS=tarpatch.o common.o
 LDLIBS=-lcrypto -lz
@@ -11,10 +11,14 @@ tardiff: $(TARDIFF_OBJS)
 tarpatch: $(TARPATCH_OBJS)
 	$(CC) $(LDFLAGS) -o tarpatch $(TARPATCH_OBJS) $(LDLIBS)
 
+install: all
+	install tardiff $(PREFIX)/bin
+	install tarpatch $(PREFIX)/bin
+
 clean:
 	rm -f *.o
 
 distclean: clean
 	rm -f tardiff tarpatch
 
-.PHONY: all clean distclean
+.PHONY: all clean distclean install
