@@ -1,0 +1,29 @@
+File format specification for the differences file.
+
+HEADER
+    8 bytes magic string: "tardiff0" (no terminating null character!)
+
+Then, a sequence of instructions, each formatted as follows:
+        4 bytes: S (unsigned)
+        2 bytes: C (unsigned)
+        2 bytes: A (unsigned)
+    512*A bytes: new block data
+
+    Interpret this as follows:
+        if S == 0xffffffff and C == 0xffff and A == 0xffff:
+            end of instructions has been reached
+
+        if C >  0x7fff or A > 0x7fff:
+            invalid data (higher values are reserved)
+
+        if S == 0xffffffff:
+            if C > 0: invalid data
+        else:
+            if C == 0: invalid data
+            else: copy blocks with index S through S+C (exclusive) to output
+
+        if A > 0:
+            copy extra data (A blocks) to output
+
+FOOTER
+    16 bytes: MD5 digest of the resulting output file

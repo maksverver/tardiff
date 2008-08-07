@@ -1,0 +1,5 @@
+- document code
+- verify correct handling of large files (>4GB)
+
+New feature:
+- efficient seeking in gzip files
