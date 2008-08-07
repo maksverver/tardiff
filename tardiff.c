@@ -26,6 +26,7 @@ static size_t xalloc_size = 0;
 static MD5_CTX file2_md5_ctx;
 
 /* Counts for patch instruction */
+static uint32_t next_block = 0;     /* prefered next block */
 static uint32_t S = 0xffffffffu;    /* seek to */
 static uint16_t C = 0;              /* copy existing blocks*/
 static uint16_t A = 0;              /* append new blocks */
@@ -127,35 +128,42 @@ void copy_block(uint32_t index)
     if (C == NC) emit_instruction();
 }
 
-/* Searches for the given digest in the index and returns a pointer to the
-   pointer to the node in the index. The return value is never NULL (but may
-   point to NULL if the block was not found). */
-IndexNode **lookup(uint8_t digest[DS])
-{
-    IndexNode **node;
+/* Searches for and returns a pointer to a block in the index with the given
+   digest, or NULL if it does not exist.
 
-    node = &block_index[*(uint32_t*)digest % HT];
-    while (*node != NULL)
+   If index is non-zero, the return value will point to a matching block with
+   the given index if it exists. Otherwise the first matching block is returned.
+*/
+IndexNode *lookup(uint8_t digest[DS], uint32_t index)
+{
+    IndexNode *node, *first = NULL;
+
+    node = block_index[*(uint32_t*)digest % HT];
+    while (node != NULL)
     {
-        if (memcmp((*node)->digest, digest, DS) == 0) break;
-        node = &(*node)->next;
+        if (memcmp(node->digest, digest, DS) == 0)
+        {
+            if (index == 0 || node->index == index) return node;
+            if (first == NULL) first = node;
+        }
+        node = node->next;
     }
 
-    return node;
+    return first;
 }
 
 /* Callback called while enumerating over file 1.
    Stores the digest and index of every block received in the hash table. */
 void pass_1_callback(Block *block)
 {
-    IndexNode **node = lookup(block->digest);
-    if (*node != NULL) return;  /* digest is already present */
+    IndexNode *node, **bucket;
 
-    /* Add block to bucket */
-    *node = xalloc(sizeof(IndexNode));
-    (*node)->next = NULL;
-    memcpy((*node)->digest, block->digest, DS);
-    (*node)->index = block->index;
+    bucket = &block_index[*(uint32_t*)(block->digest) % HT];
+    node = xalloc(sizeof(IndexNode));
+    node->next = *bucket;
+    memcpy(node->digest, block->digest, DS);
+    node->index = block->index;
+    *bucket = node;
 }
 
 /* Callback called while enumerating over file 1.
@@ -163,9 +171,17 @@ void pass_1_callback(Block *block)
    wether or not the blocks were found. */
 void pass_2_callback(Block *block)
 {
-    IndexNode **node = lookup(block->digest);
-    if (*node == NULL) append_block(block->data);
-    if (*node != NULL) copy_block((*node)->index);
+    IndexNode *node = lookup(block->digest, next_block);
+    if (node == NULL)
+    {
+        append_block(block->data);
+        next_block = 0;
+    }
+    else
+    {
+        copy_block(node->index);
+        next_block = node->index + 1;
+    }
     MD5_Update(&file2_md5_ctx, block->data, BS);
 }
 
