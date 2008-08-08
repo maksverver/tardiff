@@ -51,8 +51,8 @@ USAGE
 tardiff <file1> <file2> <diff>
     Creates a file with the differences between file 1 and file 2.
 
-    Diffing files is fast, since each file is read only once, but uses a lot of
-    memory (around 6.25% of file 1, plus a few MB of constant memory).
+    Uses temporary disk space in the order of 20 bytes per input block
+    (or around 4% of file 1's size).
 
     Either <file1> or <file2> can be specified as "-", in which case data is
     read from standard input. If <diff> is specified as "-", output is written

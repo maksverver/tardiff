@@ -1,5 +1,5 @@
-CFLAGS=-Wall -Wextra -g -O2
-TARDIFF_OBJS=tardiff.o common.o
+CFLAGS=-Wall -Wextra -O2
+TARDIFF_OBJS=tardiff.o common.o binsort.o
 TARPATCH_OBJS=tarpatch.o common.o
 LDLIBS=-lcrypto -lz
 

@@ -88,7 +88,7 @@ void process_diff()
         if (S < 0xffffffffu)
         {
             off_t pos = (off_t)BS*S;
-            assert(pos/S == BS);    /* detect overflow */
+            assert(pos/BS == S);    /* detect overflow */
             if (!is_file1->seek(is_file1, (off_t)BS*S))
             {
                 fprintf(stderr, "Seek failed.\n");

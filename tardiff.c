@@ -1,67 +1,26 @@
 #include "common.h"
+#include "binsort.h"
 
-typedef struct Block
+typedef struct BlockInfo
 {
-    uint32_t index;
     uint8_t  digest[DS];
-    char     data[BS];
-} Block;
-
-typedef struct IndexNode
-{
-    struct IndexNode *next;
-    uint8_t digest[DS];
     uint32_t index;
-} IndexNode;
+} BlockInfo;
 
-/* Hash table index of file 1 */
-IndexNode *block_index[HT] = { };
-
-/* Custom allocator data structures */
-static char *xalloc_data = NULL;
-static size_t xalloc_size = 0;
+/* Block sorting */
+static BinSort *bs;
+static BlockInfo *blocks;
+static size_t nblocks;
 
 /* MD5 digest for file 2
   (useful to verify if a patch has been applied correctly) */
 static MD5_CTX file2_md5_ctx;
 
 /* Counts for patch instruction */
-static uint32_t next_block = 0;     /* prefered next block */
 static uint32_t S = 0xffffffffu;    /* seek to */
 static uint16_t C = 0;              /* copy existing blocks*/
 static uint16_t A = 0;              /* append new blocks */
 static char new_blocks[NA][BS];
-
-/* Allocate memory (that is never released).
-   If memory cannot be allocated, execution is aborted, so this function
-   never returns NULL. */
-void *xalloc(size_t len)
-{
-    const size_t chunk_size = 1<<20;   /* 1 MB */
-    void *buf;
-
-    if (len >= chunk_size)
-    {
-        buf = malloc(len);
-        assert(buf != NULL);
-        return buf;
-    }
-
-    if (len < 1) len = 1;
-
-    if (xalloc_size < len)
-    {
-        /* Allocate new chunk (1MB) */
-        xalloc_size = chunk_size;
-        xalloc_data = malloc(chunk_size);
-        assert(xalloc_data != NULL);
-    }
-
-    buf = xalloc_data;
-    xalloc_data += len;
-    xalloc_size -= len;
-    return buf;
-}
 
 /* Writes the given data (or aborts if the write fails) */
 void write_data(void *buf, size_t len)
@@ -128,76 +87,95 @@ void copy_block(uint32_t index)
     if (C == NC) emit_instruction();
 }
 
-/* Searches for and returns a pointer to a block in the index with the given
-   digest, or NULL if it does not exist.
-
-   If index is non-zero, the return value will point to a matching block with
-   the given index if it exists. Otherwise the first matching block is returned.
+/* Searches for a block in the list of blocks from file 1.
+   If no block has a matching digest, NULL is returned. Otherwise, a pointer
+   is returned to the block with matching index (if it exists) or the lowest
+   index (otherwise).
 */
-IndexNode *lookup(uint8_t digest[DS], uint32_t index)
+BlockInfo *lookup(uint8_t digest[DS], size_t index)
 {
-    IndexNode *node, *first = NULL;
+    BlockInfo *lo, *mid, *hi, *first;
+    int d;
 
-    node = block_index[*(uint32_t*)digest % HT];
-    while (node != NULL)
+    /* Binary search for first block with digest >= required digest */
+    lo = blocks;
+    hi = blocks + nblocks;
+    while (lo < hi)
     {
-        if (memcmp(node->digest, digest, DS) == 0)
+        mid = lo + (hi - lo)/2;
+        d = memcmp(mid->digest, digest, DS);
+        if (d <  0) lo = mid + 1;
+        if (d >= 0) hi = mid;
+    }
+
+    if (lo == blocks + nblocks || memcmp(lo->digest, digest, DS) > 0)
+    {   /* No block with matching digest found */
+        return NULL;
+    }
+
+    first = lo;
+
+    /* Now search for the first block with digest > required digest */
+    lo = hi = first + 1;
+    while (hi < blocks + nblocks)
+    {
+        if (memcmp(hi->digest, digest, DS) > 0) break;
+        hi += hi - first;
+    }
+    if (hi > blocks + nblocks) hi = blocks + nblocks;
+    while (lo < hi)
+    {
+        mid = lo + (hi - lo)/2;
+        d = memcmp(mid->digest, digest, DS);
+        if (d <= 0) lo = mid + 1;
+        if (d >  0) hi = mid;
+    }
+
+    /* All blocks with matching digest are in range [first:lo) */
+    if (index > 0)
+    {
+        /* Binary search for the right index. */
+        hi = lo;
+        lo = first;
+        while (lo < hi)
         {
-            if (index == 0 || node->index == index) return node;
-            if (first == NULL) first = node;
+            mid = lo + (hi - lo)/2;
+            d = memcmp(&mid->index, &index, sizeof(uint32_t));
+            if (d == 0) return mid;
+            if (d < 0) lo = mid + 1;
+            if (d > 0) hi = mid;
         }
-        node = node->next;
     }
 
     return first;
 }
 
-/* Callback called while enumerating over file 1.
-   Stores the digest and index of every block received in the hash table. */
-void pass_1_callback(Block *block)
+/* Callback called while enumerating over file 1. */
+void pass_1_callback(BlockInfo *block, char data[DS])
 {
-    IndexNode *node, **bucket;
-
-    bucket = &block_index[*(uint32_t*)(block->digest) % HT];
-    node = xalloc(sizeof(IndexNode));
-    node->next = *bucket;
-    memcpy(node->digest, block->digest, DS);
-    node->index = block->index;
-    *bucket = node;
+    (void)data;
+    BinSort_add(bs, block);
 }
 
 /* Callback called while enumerating over file 1.
-   Looks up blocks in the hash table and builds patch instructions according to
+   Searches for blocks in the index and builds patch instructions according to
    wether or not the blocks were found. */
-void pass_2_callback(Block *block)
+void pass_2_callback(BlockInfo *block, char data[DS])
 {
-    IndexNode *node = lookup(block->digest, next_block);
-    if (node == NULL)
-    {
-        append_block(block->data);
-        next_block = 0;
-    }
-    else
-    {
-        copy_block(node->index);
-        next_block = node->index + 1;
-    }
-    MD5_Update(&file2_md5_ctx, block->data, BS);
+    BlockInfo *bi;
+
+    bi = lookup(block->digest, (C > 0 && A == 0) ? S + C : 0);
+    if (bi == NULL) append_block(data);
+    if (bi != NULL) copy_block(bi->index);
+    MD5_Update(&file2_md5_ctx, data, BS);
 }
 
-void compute_digest(Block *block)
+void scan_file(const char *path, void (*callback)(BlockInfo *, char*))
 {
-    MD5_CTX ctx;
-
-    MD5_Init(&ctx);
-    MD5_Update(&ctx, block->data, BS);
-    MD5_Final(block->digest, &ctx);
-}
-
-void scan_file(const char *path, void (*callback)(Block *))
-{
+    MD5_CTX md5_ctx;
     InputStream *is;
-    Block block;
+    BlockInfo block;
+    char block_data[BS];
     size_t nread;
 
     is = (strcmp(path, "-") == 0) ? OpenStdinInputStream()
@@ -217,15 +195,21 @@ void scan_file(const char *path, void (*callback)(Block *))
             abort();
         }
 
-        nread = is->read(is, block.data, BS);
+        nread = is->read(is, block_data, BS);
         if (nread == 0) break;
         if (nread < BS)
         {
             fprintf(stderr, "WARNING: last block padded with zeroes\n");
-            memset(block.data + nread, 0, BS - nread);
+            memset(block_data + nread, 0, BS - nread);
         }
-        compute_digest(&block);
-        callback(&block);
+
+        /* Compute digest */
+        MD5_Init(&md5_ctx);
+        MD5_Update(&md5_ctx, block_data, BS);
+        MD5_Final(block.digest, &md5_ctx);
+
+        callback(&block, block_data);
+
         if (nread < BS) break;
     }
 
@@ -257,6 +241,7 @@ void write_footer()
 int main(int argc, char *argv[])
 {
     assert(MD5_DIGEST_LENGTH == DS);
+    assert(sizeof(BlockInfo) == 20);
 
     if (argc != 4)
     {
@@ -267,10 +252,24 @@ int main(int argc, char *argv[])
 
     if (strcmp(argv[3], "-") != 0) redirect_stdout(argv[3]);
 
-    write_header();
+    bs = BinSort_create(sizeof(BlockInfo), 4096);
+    assert(bs != NULL);
+
+    /* Scan file 1 and gather block info */
     scan_file(argv[1], &pass_1_callback);
+
+    /* Obtain sorted list of blocks */
+    nblocks = BinSort_size(bs);
+    assert((nblocks*sizeof(BlockInfo))/sizeof(BlockInfo) == nblocks);
+    blocks = BinSort_mmap(bs);
+    assert(blocks != NULL);
+
+    /* Scan file 2 and generate diff */
+    write_header();
     scan_file(argv[2], &pass_2_callback);
     write_footer();
+
+    BinSort_destroy(bs);
 
     return 0;
 }
