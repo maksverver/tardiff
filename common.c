@@ -18,7 +18,7 @@ static size_t FS_read(FileStream *fs, void *buf, size_t len)
 static bool FS_seek(FileStream *fs, off_t pos)
 {
     assert((off_t)(z_off_t)pos == pos);
-    return gzseek(fs->file, (z_off_t)pos, SEEK_SET) == pos;
+    return gzseek(fs->file, (z_off_t)pos, SEEK_SET) != (z_off_t)-1;
 }
 
 static void FS_close(FileStream *fs)
@@ -64,7 +64,7 @@ static bool stdin_seek(InputStream *is, off_t pos)
 {   /* seeking not supported */
     (void)is;
     (void)pos;
-    return false;   
+    return false;
 }
 
 static void stdin_close(InputStream *is)
