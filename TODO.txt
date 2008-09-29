@@ -1,5 +1,26 @@
 - document code
 - verify correct handling of large files (>4GB)
 
+New tool: tardiffmerge
+  - WIP
+
+New tool: tardiffinfo
+  - Display information about given files and patches by computing hash codes
+    and figuring out how they can be combined to reconstruct existing files,
+    so a user can figure out which files and patches work together without
+    explicitly trying patching (and without looking up MD5 checksums in the diff
+    files).
+
+    Effectively, files form a graph, where tar files are nodes represented by
+    their MD5 digests, and patches are directed edges. The tardiffinfo tool
+    should display the graph and report on patches that are unreachable from
+    any given tar files (presumably, this makes the patch useless to the user).
+ 
+
 New feature:
 - efficient seeking in gzip files
+
+Merge tools into a single one (to reduce total file size), e.g.:
+ tardiff <file1> <file2> <diff>  -- to dif
+ tardiff [-p|--patch] <file1> <diff> -- to patch
+ tardiff [-m|--merge] <diff1> .. <diffN> <diff> -- to merge

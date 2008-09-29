@@ -1,4 +1,13 @@
-File format specification for the differences file.
+File format specification for the differences file (version 1.1)
+
+Changes since version 1.0:
+    Added 16 bytes to the footer containing an MD5 digest of the original
+    input file. This is useful to determine whether patches can be merged
+    in a meaningful way.
+
+    This affects only the new tardiffmerge tool, which must be able to process
+    both version 1.0 and version 1.1 files. The tarpatch tool ignores the extra
+    data, when it exists.
 
 HEADER
     8 bytes magic string: "tardiff0" (no terminating null character!)
@@ -27,3 +36,4 @@ Then, a sequence of instructions, each formatted as follows:
 
 FOOTER
     16 bytes: MD5 digest of the resulting output file
+    16 bytes: MD5 digest of the original input file (since version 1.1)
