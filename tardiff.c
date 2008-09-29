@@ -12,9 +12,9 @@ static BinSort *bs;
 static BlockInfo *blocks;
 static size_t nblocks;
 
-/* MD5 digest for file 2
-  (useful to verify if a patch has been applied correctly) */
-static MD5_CTX file2_md5_ctx;
+/* MD5 digests for tar files
+   (used to detect errors when merging and applying patches) */
+static MD5_CTX file1_md5_ctx, file2_md5_ctx;
 
 /* Counts for patch instruction */
 static uint32_t S = 0xffffffffu;    /* seek to */
@@ -151,16 +151,17 @@ BlockInfo *lookup(uint8_t digest[DS], size_t index)
 }
 
 /* Callback called while enumerating over file 1. */
-void pass_1_callback(BlockInfo *block, char data[DS])
+void pass_1_callback(BlockInfo *block, char data[BS])
 {
     (void)data;
     BinSort_add(bs, block);
+    MD5_Update(&file1_md5_ctx, data, BS);
 }
 
 /* Callback called while enumerating over file 1.
    Searches for blocks in the index and builds patch instructions according to
    wether or not the blocks were found. */
-void pass_2_callback(BlockInfo *block, char data[DS])
+void pass_2_callback(BlockInfo *block, char data[BS])
 {
     BlockInfo *bi;
 
@@ -219,7 +220,6 @@ void scan_file(const char *path, void (*callback)(BlockInfo *, char*))
 void write_header()
 {
     write_data(MAGIC_STR, MAGIC_LEN);
-    MD5_Init(&file2_md5_ctx);
 }
 
 void write_footer()
@@ -235,6 +235,10 @@ void write_footer()
 
     /* append MD5 digest of file 2 */
     MD5_Final(digest, &file2_md5_ctx);
+    write_data(digest, DS);
+
+    /* append MD5 digest of file 1 (new in version 1.1) */
+    MD5_Final(digest, &file1_md5_ctx);
     write_data(digest, DS);
 }
 
@@ -256,6 +260,7 @@ int main(int argc, char *argv[])
     assert(bs != NULL);
 
     /* Scan file 1 and gather block info */
+    MD5_Init(&file1_md5_ctx);
     scan_file(argv[1], &pass_1_callback);
 
     /* Obtain sorted list of blocks */
@@ -266,6 +271,7 @@ int main(int argc, char *argv[])
 
     /* Scan file 2 and generate diff */
     write_header();
+    MD5_Init(&file2_md5_ctx);
     scan_file(argv[2], &pass_2_callback);
     write_footer();
 
