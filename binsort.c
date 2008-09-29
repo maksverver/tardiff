@@ -76,7 +76,6 @@ static void merge_files(BinSort *bs)
 
     fclose(f1);
     fclose(f2);
-    fflush(fp);
 
     bs->files[bs->nfiles - 2] = fp;
     bs->sizes[bs->nfiles - 2] += bs->sizes[bs->nfiles - 1];
@@ -216,8 +215,12 @@ void *BinSort_mmap(BinSort *bs)
 
     purge_cached(bs);
     while (bs->nfiles > 1) merge_files(bs);
-
     assert(bs->nstored == bs->sizes[0]);
+
+    /* Flushing is necessary here, to ensure no data is buffered in user-space,
+       in which case mmap() would not be able to map the entire file into
+       memory. */
+    fflush(NULL);
 
     bs->data = mmap(NULL, bs->nstored * bs->block_size, PROT_READ, MAP_SHARED,
                     fileno(bs->files[0]), 0);
