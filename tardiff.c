@@ -22,40 +22,6 @@ static uint16_t C = 0;              /* copy existing blocks*/
 static uint16_t A = 0;              /* append new blocks */
 static char new_blocks[NA][BS];
 
-/* Writes the given data (or aborts if the write fails) */
-void write_data(void *buf, size_t len)
-{
-    if (fwrite(buf, 1, len, stdout) != len)
-    {
-        fprintf(stderr, "Write failed!\n");
-        abort();
-    }
-}
-
-/* Writes a 32-bit unsigned integer in big-endian notation */
-void write_uint32(uint32_t i)
-{
-    uint8_t buf[4];
-    buf[3] = i&255;
-    i >>= 8;
-    buf[2] = i&255;
-    i >>= 8;
-    buf[1] = i&255;
-    i >>= 8;
-    buf[0] = i&255;
-    write_data(buf, 4);
-}
-
-/* Writes a 16-bit unsigned integer in big-endian notation */
-void write_uint16(uint16_t i)
-{
-    uint8_t buf[2];
-    buf[1] = i&255;
-    i >>= 8;
-    buf[0] = i&255;
-    write_data(buf, 2);
-}
-
 void emit_instruction()
 {
     if (C == 0 && A == 0) return;   /* empty instruction */

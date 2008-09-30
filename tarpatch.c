@@ -3,43 +3,6 @@
 static InputStream *is_file1, *is_diff;
 static MD5_CTX file2_md5_ctx;
 
-void write_data(void *buf, size_t len)
-{
-    if (fwrite(buf, 1, len, stdout) != len)
-    {
-        fprintf(stderr, "Write failed!\n");
-        abort();
-    }
-    MD5_Update(&file2_md5_ctx, buf, len);
-}
-
-void read_data(InputStream *is, void *buf, size_t len)
-{
-    if (is->read(is, buf, len) != len)
-    {
-        fprintf(stderr, "Read failed!\n");
-        abort();
-    }
-}
-
-uint32_t read_uint32(InputStream *is)
-{
-    uint8_t buf[4];
-    read_data(is, buf, 4);
-    return ((uint32_t)buf[0] << 24) |
-           ((uint32_t)buf[1] << 16) |
-           ((uint32_t)buf[2] <<  8) |
-           ((uint32_t)buf[3] <<  0);
-}
-
-uint16_t read_uint16(InputStream *is)
-{
-    uint8_t buf[2];
-    read_data(is, buf, 2);
-    return ((uint16_t)buf[0] <<  8) |
-           ((uint16_t)buf[1] <<  0);
-}
-
 FILE *open_input_file(const char *path)
 {
     FILE *fp;
@@ -98,6 +61,7 @@ void process_diff()
             {
                 read_data(is_file1, data, BS);
                 write_data(data, BS);
+                MD5_Update(&file2_md5_ctx, data, BS);
                 C -= 1;
             }
         }
@@ -106,6 +70,7 @@ void process_diff()
         {
             read_data(is_diff, data, BS);
             write_data(data, BS);
+            MD5_Update(&file2_md5_ctx, data, BS);
             A -= 1;
         }
     }

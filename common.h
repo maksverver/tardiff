@@ -31,6 +31,27 @@ typedef struct InputStream
 InputStream *OpenStdinInputStream();
 InputStream *OpenFileInputStream(const char *path);
 
+/* Redirects standard output to a file at the given path, or aborts if the file
+   cannot be opened, or if it exists and is not empty (in case the file will be
+   closed leaving the contents intact). */
 void redirect_stdout(const char *path);
+
+/* Reads data from the given input stream into a buffer or aborts on failure. */
+void read_data(InputStream *is, void *buf, size_t len);
+
+/* Reads a big-endian 32-bit unsigned integer in or aborts. */
+uint32_t read_uint32(InputStream *is);
+
+/* Reads a big-endian 16-bit unsigned integer or aborts. */
+uint16_t read_uint16(InputStream *is);
+
+/* Writes data from the given buffer to standard output or aborts on failure. */
+void write_data(void *buf, size_t len);
+
+/* Writes a big-endian 32-bit unsigned integer to standard output or aborts. */
+void write_uint32(uint32_t i);
+
+/* Writes a big-endian 16-bit unsigned integer to standard output or aborts. */
+void write_uint16(uint16_t i);
 
 #endif /* ndef COMMON_H_INCLUDED */

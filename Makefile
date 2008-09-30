@@ -23,6 +23,6 @@ clean:
 	rm -f *.o
 
 distclean: clean
-	rm -f tardiff tarpatch
+	rm -f tardiff tarpatch tardiffmerge
 
 .PHONY: all clean distclean install
