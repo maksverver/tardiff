@@ -16,8 +16,9 @@ tardiffmerge: $(TARDIFFMERGE_OBJS)
 	$(CC) $(LDFLAGS) -o tardiffmerge $(TARDIFFMERGE_OBJS) $(LDLIBS)
 
 install: all
-	install tardiff $(PREFIX)/bin
-	install tarpatch $(PREFIX)/bin
+	install -s tardiff $(PREFIX)/bin
+	install -s tarpatch $(PREFIX)/bin
+	install -s tardiffmerge $(PREFIX)/bin
 
 clean:
 	rm -f *.o
