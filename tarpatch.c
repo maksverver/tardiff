@@ -3,6 +3,18 @@
 static InputStream *is_file1, *is_diff;
 static MD5_CTX file2_md5_ctx;
 
+void hexstring(char *str, uint8_t *data, size_t size)
+{
+    static const char *hexdigits = "0123456789abcdef";
+
+    while (size-- > 0)
+    {
+        *str++ = hexdigits[*data/16];
+        *str++ = hexdigits[*data%16];
+        ++data;
+    }
+}
+
 FILE *open_input_file(const char *path)
 {
     FILE *fp;
@@ -80,15 +92,17 @@ void process_diff()
 
     if (memcmp(digest1, digest2, DS) != 0)
     {
+        char digest1_str[2*DS + 1],
+             digest2_str[2*DS + 1];
+
+        hexstring(digest1_str, digest1, DS);
+        hexstring(digest2_str, digest2, DS);
+
         fprintf(stderr,
             "Output file verification failed!\n"
-            "Stored (original) file hash:  %08x%08x%08x%08x\n"
-            "Computed (new) file hash:     %08x%08x%08x%08x\n"
-            ,
-            ((uint32_t*)digest1)[0], ((uint32_t*)digest1)[1],
-            ((uint32_t*)digest1)[2], ((uint32_t*)digest1)[3],
-            ((uint32_t*)digest2)[0], ((uint32_t*)digest2)[1],
-            ((uint32_t*)digest2)[2], ((uint32_t*)digest2)[3] );
+            "Original file hash:  %s (expected)\n"
+            "New file hash:       %s (computed)\n",
+            digest1_str, digest2_str );
         exit(1);
     }
 }
