@@ -22,7 +22,7 @@ static uint16_t C = 0;              /* copy existing blocks*/
 static uint16_t A = 0;              /* append new blocks */
 static char new_blocks[NA][BS];
 
-void emit_instruction()
+static void emit_instruction()
 {
     if (C == 0 && A == 0) return;   /* empty instruction */
 
@@ -39,13 +39,13 @@ void emit_instruction()
     C = A = 0;
 }
 
-void append_block(char data[BS])
+static void append_block(char data[BS])
 {
     memcpy(new_blocks[A++], data, BS);
     if (A == NA) emit_instruction();
 }
 
-void copy_block(uint32_t index)
+static void copy_block(uint32_t index)
 {
     if (A != 0 || index != S + C) emit_instruction();
     if (C == 0) S = index;
@@ -58,7 +58,7 @@ void copy_block(uint32_t index)
    is returned to the block with matching index (if it exists) or the lowest
    index (otherwise).
 */
-BlockInfo *lookup(uint8_t digest[DS], size_t index)
+static BlockInfo *lookup(uint8_t digest[DS], size_t index)
 {
     BlockInfo *lo, *mid, *hi, *first;
     int d;
@@ -117,7 +117,7 @@ BlockInfo *lookup(uint8_t digest[DS], size_t index)
 }
 
 /* Callback called while enumerating over file 1. */
-void pass_1_callback(BlockInfo *block, char data[BS])
+static void pass_1_callback(BlockInfo *block, char data[BS])
 {
     (void)data;
     BinSort_add(bs, block);
@@ -127,7 +127,7 @@ void pass_1_callback(BlockInfo *block, char data[BS])
 /* Callback called while enumerating over file 1.
    Searches for blocks in the index and builds patch instructions according to
    wether or not the blocks were found. */
-void pass_2_callback(BlockInfo *block, char data[BS])
+static void pass_2_callback(BlockInfo *block, char data[BS])
 {
     BlockInfo *bi;
 
@@ -137,7 +137,7 @@ void pass_2_callback(BlockInfo *block, char data[BS])
     MD5_Update(&file2_md5_ctx, data, BS);
 }
 
-void scan_file(const char *path, void (*callback)(BlockInfo *, char*))
+static void scan_file(const char *path, void (*callback)(BlockInfo *, char*))
 {
     MD5_CTX md5_ctx;
     InputStream *is;
@@ -183,12 +183,12 @@ void scan_file(const char *path, void (*callback)(BlockInfo *, char*))
     is->close(is);
 }
 
-void write_header()
+static void write_header()
 {
     write_data(MAGIC_STR, MAGIC_LEN);
 }
 
-void write_footer()
+static void write_footer()
 {
     uint8_t digest[DS];
 

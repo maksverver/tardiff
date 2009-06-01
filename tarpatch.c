@@ -3,7 +3,7 @@
 static InputStream *is_file1, *is_diff;
 static MD5_CTX file2_md5_ctx;
 
-void hexstring(char *str, uint8_t *data, size_t size)
+static void hexstring(char *str, uint8_t *data, size_t size)
 {
     static const char *hexdigits = "0123456789abcdef";
 
@@ -15,21 +15,7 @@ void hexstring(char *str, uint8_t *data, size_t size)
     }
 }
 
-FILE *open_input_file(const char *path)
-{
-    FILE *fp;
-
-    fp = fopen(path, "rb");
-    if (fp == NULL)
-    {
-        fprintf(stderr, "Cannot open \"%s\" for reading!\n", path);
-        exit(1);
-    }
-
-    return fp;
-}
-
-void process_diff()
+static void process_diff()
 {
     char magic_buf[MAGIC_LEN];
     char data[BS];
