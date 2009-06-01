@@ -9,6 +9,7 @@ static bool process_diff(InputStream *is)
     uint8_t     digest2[DS];
     char        digest1_str[2*DS + 1];
     char        digest2_str[2*DS + 1];
+    uint32_t    TC = 0, TA = 0;
 
     for (;;)
     {
@@ -29,6 +30,9 @@ static bool process_diff(InputStream *is)
             printf("invalid diff data\n");
             return false;
         }
+
+        TC += C;
+        TA += A;
 
         while (A > 0)
         {
@@ -59,7 +63,8 @@ static bool process_diff(InputStream *is)
         strcpy(digest2_str, "?");
     }
 
-    printf("%s -> %s\n", digest2_str, digest1_str);
+    printf( "%s -> %s (%d blocks) (%d copied, %d new)\n",
+            digest2_str, digest1_str, TC + TA, TC, TA );
     return true;
 }
 
@@ -91,7 +96,7 @@ static bool process_file(const char *path)
         {
             if (len == 0)
             {
-                printf("empty file\n");
+                printf("unreadable or empty file\n");
             }
             else
             {
@@ -114,6 +119,7 @@ static bool process_file(const char *path)
         MD5_CTX     md5_ctx;
         uint8_t     digest[DS];
         char        digest_str[2*DS + 1];
+        size_t      total = 0;
 
         printf("data: ");
         fflush(stdout);
@@ -122,13 +128,15 @@ static bool process_file(const char *path)
         MD5_Init(&md5_ctx);
         while (len > 0)
         {
+            total += len;
             MD5_Update(&md5_ctx, buf, len);
             len = is->read(is, buf, sizeof(buf));
         }
         MD5_Final(digest, &md5_ctx);
 
         hexstring(digest_str, digest, DS);
-        printf("%s\n", digest_str);
+        printf( "%s (%d blocks)\n",
+                digest_str, (int)(total/BS + (bool)(total%BS)) );
 
         res = true;
     }

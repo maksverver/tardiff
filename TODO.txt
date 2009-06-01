@@ -17,7 +17,7 @@ New tool: tardiffinfo
      - number of control instructions
      - number of bytes added (contained in diff)
      - size of file generated?
- 
+
 New feature:
 - allow tardiffpatch to accept multiple diff files (which are then first merged)
 
