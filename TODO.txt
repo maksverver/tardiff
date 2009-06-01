@@ -13,10 +13,10 @@ New tool: tardiffinfo
     should display the graph and report on patches that are unreachable from
     any given tar files (presumably, this makes the patch useless to the user).
 
-    Initial version:
-     - scan each of the arguments from start to end to ensure they are complete
-     - report broken files
-     - for correct files, report MD5 digests of input and output files
+    Additional information to print:
+     - number of control instructions
+     - number of bytes added (contained in diff)
+     - size of file generated?
  
 New feature:
 - allow tardiffpatch to accept multiple diff files (which are then first merged)
