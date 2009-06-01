@@ -105,22 +105,32 @@ void read_data(InputStream *is, void *buf, size_t len)
     }
 }
 
-uint32_t read_uint32(InputStream *is)
+uint32_t parse_uint32(uint8_t *buf)
 {
-    uint8_t buf[4];
-    read_data(is, buf, 4);
     return ((uint32_t)buf[0] << 24) |
            ((uint32_t)buf[1] << 16) |
            ((uint32_t)buf[2] <<  8) |
            ((uint32_t)buf[3] <<  0);
 }
 
+uint16_t parse_uint16(uint8_t *buf)
+{
+    return ((uint16_t)buf[0] <<  8) |
+           ((uint16_t)buf[1] <<  0);
+}
+
+uint32_t read_uint32(InputStream *is)
+{
+    uint8_t buf[4];
+    read_data(is, buf, 4);
+    return parse_uint32(buf);
+}
+
 uint16_t read_uint16(InputStream *is)
 {
     uint8_t buf[2];
     read_data(is, buf, 2);
-    return ((uint16_t)buf[0] <<  8) |
-           ((uint16_t)buf[1] <<  0);
+    return parse_uint16(buf);
 }
 
 void write_data(void *buf, size_t len)
@@ -152,4 +162,18 @@ void write_uint16(uint16_t i)
     i >>= 8;
     buf[0] = i&255;
     write_data(buf, 2);
+}
+
+void hexstring(char *str, uint8_t *data, size_t size)
+{
+    static const char *hexdigits = "0123456789abcdef";
+
+    while (size-- > 0)
+    {
+        *str++ = hexdigits[*data/16];
+        *str++ = hexdigits[*data%16];
+        ++data;
+    }
+
+    *str = '\0';
 }

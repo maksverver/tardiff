@@ -39,7 +39,13 @@ void redirect_stdout(const char *path);
 /* Reads data from the given input stream into a buffer or aborts on failure. */
 void read_data(InputStream *is, void *buf, size_t len);
 
-/* Reads a big-endian 32-bit unsigned integer in or aborts. */
+/* Interprets the first four bytes in `buf' as a 32-bit big-endian integer. */
+uint32_t parse_uint32(uint8_t *buf);
+
+/* Interprets the first two bytes in `buf' as a 16-bit big-endian integer. */
+uint16_t parse_uint16(uint8_t *buf);
+
+/* Reads a big-endian 32-bit unsigned integer or aborts. */
 uint32_t read_uint32(InputStream *is);
 
 /* Reads a big-endian 16-bit unsigned integer or aborts. */
@@ -53,5 +59,9 @@ void write_uint32(uint32_t i);
 
 /* Writes a big-endian 16-bit unsigned integer to standard output or aborts. */
 void write_uint16(uint16_t i);
+
+/* Write the hexidecimal representation of the `size` bytes pointed to by `data`
+   to the buffer `str` which must have room for at least 2*size + 1 bytes. */
+void hexstring(char *str, uint8_t *data, size_t size);
 
 #endif /* ndef COMMON_H_INCLUDED */
