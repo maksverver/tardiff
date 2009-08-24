@@ -13,10 +13,26 @@ New tool: tardiffinfo
     should display the graph and report on patches that are unreachable from
     any given tar files (presumably, this makes the patch useless to the user).
 
-    Additional information to print:
-     - number of control instructions
-     - number of bytes added (contained in diff)
-     - size of file generated?
+tardiffinfo:
+ - DOCUMENT current behaviour in README.txt:
+    - tardiffinfo prints hash codes for data files, contents of diff files,
+      and writes a line to stderr for each file that cannot be used (i.e.
+      diff files whose source file is not given as a data file and cannot be
+      created by combining other data and diff files passed as arguments)
+      This is useful to detect missing/corrupted files.
+ - current used-file analysis is O(N^2) while it could be O(N log N)
+ - current used-file analysis uses O(N) of stack space
+
+Merge tools into a single one (to reduce total file size), e.g.:
+ tardiff (--)? <file1> <file2> <diff>                     -- to diff
+ tardiff (-p|--patch) (--)? <file1> <diff>                -- to patch
+ tardiff (-m|--merge) (--)? <diff1> .. <diffN> <diff>     -- to merge
+ tardiff (-i|--info) (--)? <file1> .. <fileN>             -- for info
+
+ Alternatively, basename(argv[0]) equal to tarpatch/tardiffmerge/tardiffinfo is
+ equivalent to providing -p/-m/-i. Parse options up to first '--'; rest are file
+ arguments to be passed to the tools.
+
 
 New feature:
 - allow tardiffpatch to accept multiple diff files (which are then first merged)
@@ -24,7 +40,5 @@ New feature:
 New feature:
 - efficient seeking in gzip files
 
-Merge tools into a single one (to reduce total file size), e.g.:
- tardiff <file1> <file2> <diff>  -- to dif
- tardiff [-p|--patch] <file1> <diff> -- to patch
- tardiff [-m|--merge] <diff1> .. <diffN> <diff> -- to merge
+New feature:
+- support for multi-core processing?

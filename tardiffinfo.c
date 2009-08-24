@@ -1,12 +1,81 @@
 #include "common.h"
 
-static bool process_diff(InputStream *is)
+struct InvalidFile
+{
+    const char      *error;
+};
+
+struct DataFile
+{
+    uint8_t         digest[DS];
+};
+
+struct DiffFile
+{
+    uint8_t         digest1[DS];    /* input file digest */
+    uint8_t         digest2[DS];    /* output file digest */
+    uint32_t        copied;         /* number of blocks copied */
+    uint32_t        added;          /* number of files added */
+};
+
+enum FileType { FILE_INVALID, FILE_DATA, FILE_DIFF };
+
+struct File
+{
+    struct File     *next;
+    char            *path;
+    bool            usable;
+    enum FileType   type;
+    union {
+        struct InvalidFile invalid;
+        struct DataFile    data;
+        struct DiffFile    diff;
+    };
+};
+
+static struct File *files = NULL, **files_end = &files;
+static struct File cur_file;
+
+static void add_current_file()
+{
+    /* Create a copy of the file struct at the end of the list */
+    *files_end = malloc(sizeof(struct File));
+    assert(*files_end != NULL);
+    memcpy(*files_end, &cur_file, sizeof(struct File));
+    files_end = &(*files_end)->next;
+}
+
+static void mark_diffs_usable(const uint8_t digest[DS])
+{
+    struct File *file;
+    for (file = files; file != NULL; file = file->next)
+    {
+        if (!file->usable && file->type == FILE_DIFF &&
+            memcmp(file->diff.digest1, digest, DS) == 0)
+        {
+            file->usable = true;
+            mark_diffs_usable(file->diff.digest2);
+        }
+    }
+}
+
+static void free_files()
+{
+    struct File *file, *next;
+    for (file = files; file != NULL; file = next)
+    {
+        next = file->next;
+        free(file->path);
+        free(file);
+    }
+    files = NULL;
+}
+
+static bool process_diff(InputStream *is, const char **error)
 {
     uint8_t     data[BS];
     uint32_t    S;
     uint16_t    C, A;
-    uint8_t     digest1[DS];
-    uint8_t     digest2[DS];
     char        digest1_str[2*DS + 1];
     char        digest2_str[2*DS + 1];
     uint32_t    TC = 0, TA = 0;
@@ -15,7 +84,7 @@ static bool process_diff(InputStream *is)
     {
         if (is->read(is, data, 8) != 8)
         {
-            printf("read failed -- file truncated?\n");
+            *error = "read failed -- file truncated?";
             return false;
         }
 
@@ -27,7 +96,7 @@ static bool process_diff(InputStream *is)
 
         if (C >= 0x8000 || A >= 0x8000)
         {
-            printf("invalid diff data\n");
+            *error = "invalid diff data";
             return false;
         }
 
@@ -38,45 +107,83 @@ static bool process_diff(InputStream *is)
         {
             if (is->read(is, data, BS) != BS)
             {
-                printf("read failed -- file truncated?\n");
+                *error = "read failed -- file truncated?";
                 return false;
             }
             A -= 1;
         }
     }
 
-    if (is->read(is, digest1, DS) != DS)
+    if (is->read(is, cur_file.diff.digest2, DS) != DS)
     {
-        printf("read failed -- file truncated?\n");
+        *error = "read failed -- file truncated?";
         return false;
     }
-    hexstring(digest1_str, digest1, DS);
+    hexstring(digest2_str, cur_file.diff.digest2, DS);
 
-    if (is->read(is, digest2, DS) == DS)
+    if (is->read(is, cur_file.diff.digest1, DS) == DS)
     {
         /* Version 1.1 file */
-        hexstring(digest2_str, digest2, DS);
+        hexstring(digest1_str, cur_file.diff.digest1, DS);
     }
     else
     {
         /* Version 1.0 file; no input file digest present */
-        strcpy(digest2_str, "?");
+        memset(cur_file.diff.digest1, 0, DS);
+        strcpy(digest1_str, "?");
     }
 
-    printf( "%s -> %s (%d blocks) (%d copied, %d new)\n",
-            digest2_str, digest1_str, TC + TA, TC, TA );
+    cur_file.type = FILE_DIFF;
+    cur_file.diff.copied = TC;
+    cur_file.diff.added  = TA;
+
+    printf( "%s -> %s (%d blocks, %6.3f%% new)\n",
+        digest1_str, digest2_str, TC + TA, 100.0*TA/(TC + TA) );
+    return true;
+}
+
+static bool process_data(InputStream *is, char *buf, size_t buf_size,
+                         size_t len, const char **error)
+{
+    MD5_CTX     md5_ctx;
+    char        digest_str[2*DS + 1];
+    size_t      total = 0;
+
+    (void)error;  /* unused */
+
+    /* Compute MD5 hash of contents */
+    MD5_Init(&md5_ctx);
+    while (len > 0)
+    {
+        total += len;
+        MD5_Update(&md5_ctx, buf, len);
+        len = is->read(is, buf, buf_size);
+    }
+    MD5_Final(cur_file.data.digest, &md5_ctx);
+
+    hexstring(digest_str, cur_file.data.digest, DS);
+    printf( "%s (%d blocks)\n",
+            digest_str, (int)(total/BS + (bool)(total%BS)) );
+
+    cur_file.type = FILE_DATA;
+
     return true;
 }
 
 static bool process_file(const char *path)
 {
-    bool        res;
+    bool        res, is_diff;
+    const char  *error = NULL;
     InputStream *is;
     char        buf[512];
     size_t      len;
 
     assert(sizeof(buf) >= MAGIC_LEN);
 
+    cur_file.next   = NULL;
+    cur_file.path   = strdup(path);
+    cur_file.usable = false;
+    assert(cur_file.path != NULL);
     printf("%s: ", path);
     fflush(stdout);
 
@@ -84,64 +191,92 @@ static bool process_file(const char *path)
                                   : OpenFileInputStream(path);
     if (is == NULL)
     {
-        printf("failed to open file\n");
-        return false;
-    }
-
-    len = is->read(is, buf, MAGIC_LEN);
-    if (memcmp(buf, MAGIC_STR, len) == 0)
-    {
-        /* File starts with prefix of signature */
-        if (len < MAGIC_LEN)
-        {
-            if (len == 0)
-            {
-                printf("unreadable or empty file\n");
-            }
-            else
-            {
-                printf("incomplete signature -- file truncated?\n");
-            }
-            return false;
-        }
-        else
-        {
-            /* Valid signature; process as differences file */
-            printf("diff: ");
-            fflush(stdout);
-            res = process_diff(is);
-        }
+        error = "failed to open file";
+        res = false;
     }
     else
     {
-        /* File does NOT start with a prefix of the signature; assume this is
-           not a differences file, but a regular data file instead. */
-        MD5_CTX     md5_ctx;
-        uint8_t     digest[DS];
-        char        digest_str[2*DS + 1];
-        size_t      total = 0;
-
-        printf("data: ");
-        fflush(stdout);
-
-        /* Compute MD5 hash of contents */
-        MD5_Init(&md5_ctx);
-        while (len > 0)
+        len = is->read(is, buf, MAGIC_LEN);
+        is_diff = memcmp(buf, MAGIC_STR, len) == 0;
+        if (is_diff)
         {
-            total += len;
-            MD5_Update(&md5_ctx, buf, len);
-            len = is->read(is, buf, sizeof(buf));
+            /* File starts with prefix of signature */
+            if (len < MAGIC_LEN)
+            {
+                if (len == 0)
+                {
+                    error = "unreadable or empty file";
+                }
+                else
+                {
+                    error = "incomplete signature -- file truncated?";
+                }
+                res = false;
+            }
+            else
+            {
+                /* Valid signature; process as differences file */
+                printf("diff: ");
+                fflush(stdout);
+                res = process_diff(is, &error);
+            }
         }
-        MD5_Final(digest, &md5_ctx);
-
-        hexstring(digest_str, digest, DS);
-        printf( "%s (%d blocks)\n",
-                digest_str, (int)(total/BS + (bool)(total%BS)) );
-
-        res = true;
+        else
+        {
+            /* File does NOT start with a prefix of the signature; assume this
+               is not a differences file, but a regular data file instead. */
+            printf("data: ");
+            fflush(stdout);
+            res = process_data(is, buf, sizeof(buf), len, &error);
+        }
     }
 
-    is->close(is);
+    if (is != NULL) is->close(is);
+
+    if (!res)
+    {
+        assert(error != NULL);
+        cur_file.type = FILE_INVALID;
+        cur_file.invalid.error = error;
+        printf("%s\n", error);
+    }
+
+    add_current_file();
+
+    return res;
+}
+
+bool write_usability_report(FILE *fp)
+{
+    static uint8_t zero_digest[DS];
+    struct File *file;
+    bool res;
+
+    /* Mark all data files as usable, as well as all diff files that can be
+       reach from a data file: */
+    for (file = files; file != NULL; file = file->next)
+    {
+        if (file->type == FILE_DATA)
+        {
+            file->usable = true;
+            mark_diffs_usable(file->data.digest);
+        }
+    }
+
+    /* To avoid gratuitous errors when using v1.0 files, mark all v1.0 diffs
+       usable and those that can be reached from them usable as well. */
+    mark_diffs_usable(zero_digest);
+
+    /* Warn about unusable files: */
+    res = true;
+    for (file = files; file != NULL; file = file->next)
+    {
+        if (!file->usable)
+        {
+            fprintf(fp, "UNUSABLE FILE: %s\n", file->path);
+            res = false;
+        }
+    }
     return res;
 }
 
@@ -158,6 +293,8 @@ int main(int argc, char *argv[])
 
     failed = 0;
     for (n = 1; n < argc; ++n) failed += !process_file(argv[n]);
+    write_usability_report(stderr);
+    free_files();
 
     return failed == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
