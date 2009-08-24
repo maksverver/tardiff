@@ -1,33 +1,28 @@
 CFLAGS=-Wall -Wextra -O2
-TARDIFF_OBJS=tardiff.o common.o binsort.o
-TARPATCH_OBJS=tarpatch.o common.o
-TARDIFFMERGE_OBJS=tardiffmerge.o common.o
-TARDIFFINFO_OBJS=tardiffinfo.o common.o
+OBJS=common.o binsort.o tardiff.o tarpatch.o tardiffmerge.o tardiffinfo.o main.o
 LDLIBS=-lcrypto -lz
 
-all: tardiff tarpatch tardiffmerge tardiffinfo
+all: tardiff
 
-tardiff: $(TARDIFF_OBJS)
-	$(CC) $(LDFLAGS) -o tardiff $(TARDIFF_OBJS) $(LDLIBS)
-
-tarpatch: $(TARPATCH_OBJS)
-	$(CC) $(LDFLAGS) -o tarpatch $(TARPATCH_OBJS) $(LDLIBS)
-
-tardiffmerge: $(TARDIFFMERGE_OBJS)
-	$(CC) $(LDFLAGS) -o tardiffmerge $(TARDIFFMERGE_OBJS) $(LDLIBS)
-
-tardiffinfo: $(TARDIFFINFO_OBJS)
-	$(CC) $(LDFLAGS) -o tardiffinfo $(TARDIFFINFO_OBJS) $(LDLIBS)
+tardiff: $(OBJS)
+	$(CC) $(LDFLAGS) -o tardiff $(OBJS) $(LDLIBS)
 
 install: all
-	install -s tardiff $(PREFIX)/bin
-	install -s tarpatch $(PREFIX)/bin
-	install -s tardiffmerge $(PREFIX)/bin
+	install -s tardiff $(PREFIX)/bin/
+	ln -sf tardiff $(PREFIX)/bin/tarpatch
+	ln -sf tardiff $(PREFIX)/bin/tardiffmerge
+	ln -sf tardiff $(PREFIX)/bin/tardiffinfo
+
+uninstall:
+	rm -f $(PREFIX)/bin/tardiff
+	rm -f $(PREFIX)/bin/tarpatch
+	rm -f $(PREFIX)/bin/tardiffmerge
+	rm -f $(PREFIX)/bin/tardiffinfo
 
 clean:
 	rm -f *.o
 
 distclean: clean
-	rm -f tardiff tarpatch tardiffmerge tardiffinfo
+	rm -f tardiff
 
-.PHONY: all clean distclean install
+.PHONY: all clean distclean install uninstall

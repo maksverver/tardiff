@@ -17,7 +17,7 @@ static void process_diff()
          memcmp(magic_buf, MAGIC_STR, MAGIC_LEN) != 0 )
     {
         fprintf(stderr, "Not a diff file!\n");
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     for (;;)
@@ -77,42 +77,36 @@ static void process_diff()
             "Original file hash:  %s (expected)\n"
             "New file hash:       %s (computed)\n",
             digest1_str, digest2_str );
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 }
 
-int main(int argc, char *argv[])
+int tarpatch(int argc, char *argv[])
 {
     assert(MD5_DIGEST_LENGTH == DS);
-
-    if (argc != 4)
-    {
-        printf("Usage:\n"
-               "    tarpatch <file1> <diff> <file2>\n");
-        return 0;
-    }
+    assert(argc == 3);
 
     /* Open file 1 */
-    is_file1 = OpenFileInputStream(argv[1]);
+    is_file1 = OpenFileInputStream(argv[0]);
     if (is_file1 == NULL)
     {
-        fprintf(stderr, "Cannot open file 1 (%s) for reading!\n", argv[1]);
-        exit(1);
+        fprintf(stderr, "Cannot open file 1 (%s) for reading!\n", argv[0]);
+        exit(EXIT_FAILURE);
     }
 
     /* Open diff file */
-    is_diff  = (strcmp(argv[2], "-") == 0) ? OpenStdinInputStream()
-                                           : OpenFileInputStream(argv[2]);
+    is_diff  = (strcmp(argv[1], "-") == 0) ? OpenStdinInputStream()
+                                           : OpenFileInputStream(argv[1]);
     if (is_diff == NULL)
     {
-        fprintf(stderr, "Cannot open diff file (%s) for reading!\n", argv[2]);
-        exit(1);
+        fprintf(stderr, "Cannot open diff file (%s) for reading!\n", argv[1]);
+        exit(EXIT_FAILURE);
     }
 
     /* Redirect output (if necessary) */
-    if (strcmp(argv[3], "-") != 0) redirect_stdout(argv[3]);
+    if (strcmp(argv[2], "-") != 0) redirect_stdout(argv[2]);
 
     process_diff();
 
-    return 0;
+    return EXIT_SUCCESS;
 }

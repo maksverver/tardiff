@@ -150,7 +150,7 @@ static void scan_file(const char *path, void (*callback)(BlockInfo *, char*))
     if (is == NULL)
     {
         fprintf(stderr, "Cannot open \"%s\" for reading!\n", path);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     for (block.index = 0; true; ++block.index)
@@ -208,26 +208,19 @@ static void write_footer()
     write_data(digest, DS);
 }
 
-int main(int argc, char *argv[])
+int tardiff(int argc, char *argv[])
 {
     assert(MD5_DIGEST_LENGTH == DS);
     assert(sizeof(BlockInfo) == 20);
 
-    if (argc != 4)
-    {
-        printf("Usage:\n"
-               "    tardiff <file1> <file2> <diff>\n");
-        return 0;
-    }
-
-    if (strcmp(argv[3], "-") != 0) redirect_stdout(argv[3]);
+    if (strcmp(argv[2], "-") != 0) redirect_stdout(argv[2]);
 
     bs = BinSort_create(sizeof(BlockInfo), 4096);
     assert(bs != NULL);
 
     /* Scan file 1 and gather block info */
     MD5_Init(&file1_md5_ctx);
-    scan_file(argv[1], &pass_1_callback);
+    scan_file(argv[0], &pass_1_callback);
 
     /* Obtain sorted list of blocks */
     nblocks = BinSort_size(bs);
@@ -238,10 +231,10 @@ int main(int argc, char *argv[])
     /* Scan file 2 and generate diff */
     write_header();
     MD5_Init(&file2_md5_ctx);
-    scan_file(argv[2], &pass_2_callback);
+    scan_file(argv[1], &pass_2_callback);
     write_footer();
 
     BinSort_destroy(bs);
 
-    return 0;
+    return EXIT_SUCCESS;
 }

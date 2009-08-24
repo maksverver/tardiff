@@ -23,7 +23,8 @@ tardiffinfo:
  - current used-file analysis is O(N^2) while it could be O(N log N)
  - current used-file analysis uses O(N) of stack space
 
-Merge tools into a single one (to reduce total file size), e.g.:
+
+DOCUMENT: tools have been merged into a single one (to reduce total file size):
  tardiff (--)? <file1> <file2> <diff>                     -- to diff
  tardiff (-p|--patch) (--)? <file1> <diff>                -- to patch
  tardiff (-m|--merge) (--)? <diff1> .. <diffN> <diff>     -- to merge

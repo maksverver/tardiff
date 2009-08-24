@@ -38,7 +38,7 @@ static void process_input(InputStream *is)
     if (fp == NULL)
     {
         fprintf(stderr, "Couldn't open temporary file!\n");
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     offset = 8;
@@ -58,7 +58,7 @@ static void process_input(InputStream *is)
              (S == 0xffffffffu && C != 0) || (S != 0xffffffffu && C == 0) )
         {
             fprintf(stderr, "Invalid instruction in differences file!\n");
-            exit(1);
+            exit(EXIT_FAILURE);
         }
 
         while (C--)
@@ -73,14 +73,14 @@ static void process_input(InputStream *is)
                 if (S >= last_num_blocks)
                 {
                     fprintf(stderr, "Invalid block index in differences file!\n");
-                    exit(1);
+                    exit(EXIT_FAILURE);
                 }
                 br = last_blocks[S++];
             }
             if (fwrite(&br, sizeof(br), 1, fp) != 1)
             {
                 fprintf(stderr, "Write to temporary file failed!\n");
-                exit(1);
+                exit(EXIT_FAILURE);
             }
             ++num_blocks;
         }
@@ -93,7 +93,7 @@ static void process_input(InputStream *is)
             if (fwrite(&br, sizeof(br), 1, fp) != 1)
             {
                 fprintf(stderr, "Write to temporary file failed!");
-                exit(1);
+                exit(EXIT_FAILURE);
             }
             ++num_blocks;
         }
@@ -114,7 +114,7 @@ static void process_input(InputStream *is)
         if (memcmp(digest1, last_digest, DS) != 0)
         {
             fprintf(stderr, "Invalid sequence of differences files!\n");
-            exit(1);
+            exit(EXIT_FAILURE);
         }
     }
     else
@@ -130,7 +130,7 @@ static void process_input(InputStream *is)
         if (munmap(last_blocks, last_num_blocks*sizeof(BlockRef)) != 0)
         {
             fprintf(stderr, "munmap() failed!\n");
-            exit(1);
+            exit(EXIT_FAILURE);
         }
     }
 
@@ -141,7 +141,7 @@ static void process_input(InputStream *is)
     if (last_blocks == NULL)
     {
         fprintf(stderr, "mmap() failed!\n");
-        exit(1);
+        exit(EXIT_FAILURE);
     }
     last_num_blocks = num_blocks;
     fclose(fp);
@@ -229,23 +229,16 @@ static void generate_output()
     }
 }
 
-int main(int argc, char *argv[])
+int tardiffmerge(int argc, char *argv[])
 {
     int n, num_diffs;
 
-    if (argc < 4)
-    {
-        printf("Usage:\n"
-               "    tardiffmerge <diff1> <diff2> [..] <diff>\n");
-        return 0;
-    }
-
-    num_diffs = argc - 2;
+    num_diffs = argc - 1;
     if (num_diffs > MAX_DIFF_FILES)
     {
         fprintf( stderr, "Too many difference files supplied "
                          "(maximum is %d)!\n", MAX_DIFF_FILES );
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     /* Open all input files first. */
@@ -253,19 +246,19 @@ int main(int argc, char *argv[])
     {
         char magic[MAGIC_LEN];
 
-        is_diff[n] = OpenFileInputStream(argv[1 + n]);
+        is_diff[n] = OpenFileInputStream(argv[n]);
         if (is_diff[n] == NULL)
         {
             fprintf(stderr, "Cannot open difference file %d (%s) "
-                            "for reading!\n", n, argv[1 + n] );
-            exit(1);
+                            "for reading!\n", n, argv[n] );
+            exit(EXIT_FAILURE);
         }
         read_data(is_diff[n], magic, MAGIC_LEN);
         if (memcmp(magic, MAGIC_STR, MAGIC_LEN) != 0)
         {
             fprintf(stderr, "File %d (%s) is not a difference file! "
-                            " (invalid magic string)\n", n, argv[1 + n]);
-            exit(1);
+                            " (invalid magic string)\n", n, argv[n]);
+            exit(EXIT_FAILURE);
         }
     }
 
@@ -283,5 +276,5 @@ int main(int argc, char *argv[])
 
     munmap(last_blocks, last_num_blocks*sizeof(BlockRef));
 
-    return 0;
+    return EXIT_SUCCESS;
 }

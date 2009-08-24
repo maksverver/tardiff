@@ -280,19 +280,11 @@ bool write_usability_report(FILE *fp)
     return res;
 }
 
-int main(int argc, char *argv[])
+int tardiffinfo(int argc, char *argv[])
 {
-    int n, failed;
+    int n, failed = 0;
 
-    if (argc < 2)
-    {
-        printf("Usage:\n"
-               "    tardiffinfo <diff1> [..]\n");
-        return 0;
-    }
-
-    failed = 0;
-    for (n = 1; n < argc; ++n) failed += !process_file(argv[n]);
+    for (n = 0; n < argc; ++n) failed += !process_file(argv[n]);
     write_usability_report(stderr);
     free_files();
 
