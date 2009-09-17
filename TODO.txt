@@ -1,45 +1,17 @@
-- document code
-- verify correct handling of large files (>4GB)
+To do:
+ - document code
+ - verify correct handling of large files (>4GB)
+   (The theoretical file size limit is 2TB)
 
-New tool: tardiffinfo
-  - Display information about given files and patches by computing hash codes
-    and figuring out how they can be combined to reconstruct existing files,
-    so a user can figure out which files and patches work together without
-    explicitly trying patching (and without looking up MD5 checksums in the diff
-    files).
-
-    Effectively, files form a graph, where tar files are nodes represented by
-    their MD5 digests, and patches are directed edges. The tardiffinfo tool
-    should display the graph and report on patches that are unreachable from
-    any given tar files (presumably, this makes the patch useless to the user).
-
+To fix:
 tardiffinfo:
- - DOCUMENT current behaviour in README.txt:
-    - tardiffinfo prints hash codes for data files, contents of diff files,
-      and writes a line to stderr for each file that cannot be used (i.e.
-      diff files whose source file is not given as a data file and cannot be
-      created by combining other data and diff files passed as arguments)
-      This is useful to detect missing/corrupted files.
  - current used-file analysis is O(N^2) while it could be O(N log N)
  - current used-file analysis uses O(N) of stack space
 
-
-DOCUMENT: tools have been merged into a single one (to reduce total file size):
- tardiff (--)? <file1> <file2> <diff>                     -- to diff
- tardiff (-p|--patch) (--)? <file1> <diff>                -- to patch
- tardiff (-m|--merge) (--)? <diff1> .. <diffN> <diff>     -- to merge
- tardiff (-i|--info) (--)? <file1> .. <fileN>             -- for info
-
- Alternatively, basename(argv[0]) equal to tarpatch/tardiffmerge/tardiffinfo is
- equivalent to providing -p/-m/-i. Parse options up to first '--'; rest are file
- arguments to be passed to the tools.
-
-
-New feature:
+Possible new features:
+- add checksum to diff files so their consistency can be verified by tardiffinfo
 - allow tardiffpatch to accept multiple diff files (which are then first merged)
-
-New feature:
 - efficient seeking in gzip files
-
-New feature:
-- support for multi-core processing?
+- support for multithreaded processing (useful for multi-core systems)
+- tardiffmerge could automatically re-order arguments for the merge operation to
+  make sense

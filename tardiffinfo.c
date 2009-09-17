@@ -282,11 +282,12 @@ bool write_usability_report(FILE *fp)
 
 int tardiffinfo(int argc, char *argv[])
 {
-    int n, failed = 0;
+    int n;
+    bool success = true;
 
-    for (n = 0; n < argc; ++n) failed += !process_file(argv[n]);
-    write_usability_report(stderr);
+    for (n = 0; n < argc; ++n) success = process_file(argv[n]) && success;
+    success = write_usability_report(stderr) && success;
     free_files();
 
-    return failed == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+    return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }
