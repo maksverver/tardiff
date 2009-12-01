@@ -149,7 +149,7 @@ static void scan_file(const char *path, void (*callback)(BlockInfo *, char*))
                                   : OpenFileInputStream(path);
     if (is == NULL)
     {
-        fprintf(stderr, "Cannot open \"%s\" for reading!\n", path);
+        fprintf(stderr, "Cannot open '%s' for reading!\n", path);
         exit(EXIT_FAILURE);
     }
 
@@ -158,7 +158,7 @@ static void scan_file(const char *path, void (*callback)(BlockInfo *, char*))
         if (block.index == 0xffffffffu)
         {
             /* This is not very likely to happen, but ok. */
-            fprintf(stderr, "File \"%s\" too large!\n", path);
+            fprintf(stderr, "File '%s' too large!\n", path);
             abort();
         }
 
