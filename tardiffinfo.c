@@ -49,7 +49,7 @@ bool write_usability_report(struct File *files, FILE *fp)
     return res;
 }
 
-int tardiffinfo(int argc, char *argv[])
+int tardiffinfo(int argc, char *argv[], const char *flags)
 {
     struct File *files;
     bool success;

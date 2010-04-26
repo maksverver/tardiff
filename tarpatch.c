@@ -81,7 +81,7 @@ static void process_diff()
     }
 }
 
-int tarpatch(int argc, char *argv[])
+int tarpatch(int argc, char *argv[], const char *flags)
 {
     assert(MD5_DIGEST_LENGTH == DS);
     assert(argc == 3);

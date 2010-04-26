@@ -208,7 +208,7 @@ static void write_footer()
     write_data(digest, DS);
 }
 
-int tardiff(int argc, char *argv[])
+int tardiff(int argc, char *argv[], const char *flags)
 {
     assert(MD5_DIGEST_LENGTH == DS);
     assert(sizeof(BlockInfo) == 20);

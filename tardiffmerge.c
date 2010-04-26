@@ -2,6 +2,8 @@
 #include "identify.h"
 #include <sys/mman.h>
 
+#define MAX_DIFF_FILES 1000
+
 /* A merged patch file is described by a sequence of block references (one for
    each block in the output file). The reference is made either to a block in
    the original file (if fp == NULL) in which case offset is a multiple of the
@@ -13,6 +15,7 @@ typedef struct BlockRef
     off_t offset;
 } BlockRef;
 
+static InputStream *is_diff[MAX_DIFF_FILES];
 static bool orig_digest_known;
 static uint8_t orig_digest[DS];
 static uint8_t last_digest[DS];
@@ -318,22 +321,15 @@ static bool generate_output()
     return true;
 }
 
-int tardiffmerge(int argc, char *argv[])
+int tardiffmerge(int argc, char *argv[], char *flags)
 {
-    int num_diffs;
+    int n, num_diffs;
     struct File *files, *file;
     bool input_ok, output_ok, order_files;
 
     num_diffs = argc - 1;
     input_ok = output_ok = false;
-    order_files = true;
-
-    if (strcmp(argv[0], "-f") == 0)
-    {
-        order_files = false;
-        ++argv;
-        --argc;
-    }
+    order_files = (strchr(flags, 'f') == NULL);
 
     /* Verify arguments are all diff files: */
     input_ok = identify_files((const char**)argv, num_diffs, NULL, &files);
@@ -355,9 +351,8 @@ int tardiffmerge(int argc, char *argv[])
             if (order_files &&
                 memcmp(file->diff.digest1, zero_digest, DS) == 0)
             {
-                fprintf(stderr,
-                    "ERROR: input contains version 1.0 difference files.\n"
-                    "Merge order cannot be determined automatically.\n");
+                fprintf(stderr, "Input contains version 1.0 difference files; "
+                                "merge order cannot be determined.\n");
                 input_ok = false;
             }
         }
@@ -368,7 +363,7 @@ int tardiffmerge(int argc, char *argv[])
         mark_usable(files);
         if (!order_input(&files))
         {
-            fprintf(stderr, "ERROR: input files could not be ordered!\n");
+            fprintf(stderr, "Input files could not be ordered!\n");
             input_ok = false;
         }
     }
@@ -378,6 +373,7 @@ int tardiffmerge(int argc, char *argv[])
         /* Redirect output (if necessary) */
         if (strcmp(argv[argc - 1], "-") != 0) redirect_stdout(argv[argc - 1]);
 
+        n = 0;
         for (file = files; file != NULL; file = file->next)
         {
             InputStream *is;
@@ -391,24 +387,28 @@ int tardiffmerge(int argc, char *argv[])
                 break;
             }
 
+            /* Save pointer here, so we can close it later. */
+            is_diff[n++] = is;
+
             /* Verify magic again */
             read_data(is, magic, MAGIC_LEN);
             if (memcmp(magic, MAGIC_STR, MAGIC_LEN) != 0)
             {
                 fprintf(stderr, "%s: not a differences file\n", file->path);
-                is->close(is);
                 break;
             }
 
             /* Process entire file */
             process_input(is);
-            is->close(is);
         }
 
         if (file == NULL)
         {
             output_ok = generate_output();
         }
+
+        /* Close open streams: */
+        while (n-- > 0) is_diff[n]->close(is_diff[n]);
 
         munmap(last_blocks, last_num_blocks*sizeof(BlockRef));
     }

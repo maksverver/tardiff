@@ -1,19 +1,22 @@
 #include <assert.h>
 #include <libgen.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
-extern int tardiff(int argc, char *argv[]);
-extern int tarpatch(int argc, char *argv[]);
-extern int tardiffinfo(int argc, char *argv[]);
-int tardiffmerge(int argc, char *argv[]);
+extern int tardiff(int argc, char *argv[], char *flags);
+extern int tarpatch(int argc, char *argv[], char *flags);
+extern int tardiffinfo(int argc, char *argv[], char *flags);
+extern int tardiffmerge(int argc, char *argv[], char *flags);
 
 static enum Tool { none, diff, patch, info, merge } tool = none;
 
 static void (*usage_func)(void);
-static int (*tool_func)(int, char**);
+static int (*tool_func)(int, char**, char*);
 static int min_args, max_args;
+static const char *tool_flags;
+static char flags[256];
 
 static void usage_tardiff()
 {
@@ -33,7 +36,7 @@ static void usage_tarpatch()
 static void usage_tardiffmerge()
 {
     printf("Usage:\n"
-           "\ttardiffmerge <diff1> <diff2> [..] <diff>\n");
+           "\ttardiffmerge [-f] <diff1> <diff2> [..] <diff>\n");
 }
 
 static void usage_tardiffinfo()
@@ -42,7 +45,7 @@ static void usage_tardiffinfo()
            "\ttardiffinfo <file> [..]\n");
 }
 
-static int select_tool(enum Tool new_tool)
+static bool select_tool(enum Tool new_tool)
 {
     /* only allowed to change the selected tool once */
     if (tool != none && tool != diff) return 0;
@@ -55,6 +58,7 @@ static int select_tool(enum Tool new_tool)
         if (usage_func == NULL) usage_func  = &usage_tardiff;
         min_args    =  3;
         max_args    =  3;
+        tool_flags  = "";
         break;
 
     case patch:
@@ -63,6 +67,7 @@ static int select_tool(enum Tool new_tool)
         if (usage_func == NULL) usage_func  = &usage_tarpatch;
         min_args    =  3;
         max_args    =  3;
+        tool_flags  = "";
         break;
 
     case merge:
@@ -71,6 +76,7 @@ static int select_tool(enum Tool new_tool)
         if (usage_func == NULL) usage_func  = &usage_tardiffmerge;
         min_args    =  3;
         max_args    = -1;
+        tool_flags  = "f";
         break;
 
     case info:
@@ -79,13 +85,24 @@ static int select_tool(enum Tool new_tool)
         if (usage_func == NULL) usage_func  = &usage_tardiffinfo;
         min_args    =  1;
         max_args    = -1;
+        tool_flags  = "";
         break;
 
     default:
-        return 0;
+        return false;
     }
 
-    return 1;
+    return true;
+}
+
+static int add_flag(char f)
+{
+    char *p;
+    if (tool_flags == NULL || strchr(tool_flags, f) == NULL) return false;
+    for (p = flags; *p != '\0'; ++p) if (*p == f) return true;
+    p[0] = f;
+    p[1] = '\0';
+    return true;
 }
 
 static char **parse_options(int argc, char *argv[])
@@ -107,7 +124,9 @@ static char **parse_options(int argc, char *argv[])
               (strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--info") == 0)
               ? select_tool(info) :
               (strcmp(argv[i], "-m") == 0 || strcmp(argv[i], "--merge") == 0)
-              ? select_tool(merge) : 0))
+              ? select_tool(merge) :
+              (argv[i][0] == '-' && argv[i][1] != '\0' && argv[i][2] == '\0')
+              ? add_flag(argv[i][1]) : false))
         {
             printf("Unrecognized option: %s\n", argv[i]);
             exit(EXIT_FAILURE);
@@ -143,5 +162,5 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    return (*tool_func)(num_args, args_begin);
+    return (*tool_func)(num_args, args_begin, flags);
 }

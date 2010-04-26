@@ -1,4 +1,4 @@
-CFLAGS=-Wall -Wextra -O2
+CFLAGS=-Wall -Wextra -O2 -g
 OBJS=common.o binsort.o identify.o tardiff.o \
 	tarpatch.o tardiffmerge.o tardiffinfo.o main.o
 LDLIBS=-lcrypto -lz
