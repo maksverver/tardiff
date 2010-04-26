@@ -68,11 +68,15 @@ tarpatch <file1> <diff> <file2>
     file is not compressed: seeking in compressed files is possible, but much
     slower than in uncompressed files.
 
-tardiffmerge <diff1> .. <diff2> <diff-output>
+tardiffmerge [-f] <diff1> .. <diff2> <diff-output>
     Reads two or more diff files and combines their contents into a single set
     of differences, usually decreasing the (combined) file size considerably.
 
-    The input files must allow seeking and must be passed in the correct order.
+    The input files must allow seeking. tardiffmerge tries to reorder the diff
+    file arguments so they can be meaningfully combined, unless the -f option
+    is specified, which forces tardiffmerge to adhere to the order used on the
+    command line. In this case tardiffmerge will still detect incorrect ordering
+    of files. This option is mainly useful to speed up the operation.
 
 tardiffinfo <file1> .. <fileN>
     Reads all the files passed on the command line, and for each diff file,

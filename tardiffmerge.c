@@ -1,7 +1,6 @@
 #include "common.h"
+#include "identify.h"
 #include <sys/mman.h>
-
-#define MAX_DIFF_FILES 100
 
 /* A merged patch file is described by a sequence of block references (one for
    each block in the output file). The reference is made either to a block in
@@ -14,12 +13,100 @@ typedef struct BlockRef
     off_t offset;
 } BlockRef;
 
-static InputStream *is_diff[MAX_DIFF_FILES];
 static bool orig_digest_known;
 static uint8_t orig_digest[DS];
 static uint8_t last_digest[DS];
 static size_t last_num_blocks;
 static BlockRef *last_blocks;
+
+/* Given a list of differences files, marks all files usable that can be
+   applied to another differences file. This should leave exactly one unusable
+   file that is the starting point for a diff sequence. */
+static void mark_usable(struct File *files)
+{
+    struct File *f, *g;
+    for (f = files; f != NULL; f = f->next)
+    {
+        assert(f->type == FILE_DIFF);
+        for (g = files; g != NULL; g = g->next)
+        {
+            assert(g->type == FILE_DIFF);
+            if (memcmp(f->diff.digest2, g->diff.digest1, DS) == 0)
+            {
+                g->usable = true;
+            }
+        }
+    }
+}
+
+/* Returns the only unusable file (if there is exactly one): */
+static struct File *find_first(struct File *files)
+{
+    struct File *file, *res = NULL;
+    for (file = files; file != NULL; file = file->next)
+    {
+        if (!file->usable)
+        {
+            if (res != NULL) return NULL;
+            res = file;
+        }
+    }
+    return res;
+}
+
+/* Returns the only file with the given source digest: */
+static struct File *find_digest(struct File *files, uint8_t digest[DS])
+{
+    struct File *file, *res = NULL;
+    for (file = files; file != NULL; file = file->next)
+    {
+        if (memcmp(file->diff.digest1, digest, DS) == 0)
+        {
+            if (res != NULL) return NULL;
+            res = file;
+        }
+    }
+    return res;
+}
+
+/* Moves the target file to the front of the list:: */
+static struct File *move_to_front(struct File *files, struct File *target)
+{
+    struct File *file, *list, **ptr = &list;
+    for (file = files; file != NULL; file = file->next)
+    {
+        if (file != target)
+        {
+            *ptr = file;
+            ptr = &file->next;
+        }
+    }
+    *ptr = NULL;
+    target->next = list;
+    return target;
+}
+
+/* Order the list of input files so each next file applies to the previous: */
+static bool order_input(struct File **files)
+{
+    struct File *cur, *succ;
+
+    /* Determine first file */
+    cur = find_first(*files);
+    if (cur == NULL) return false;
+    *files = move_to_front(*files, cur);
+
+    /* Order remaining files */
+    while (cur->next)
+    {
+        succ = find_digest(cur->next, cur->diff.digest2);
+        if (succ == NULL) return false;
+        cur->next = move_to_front(cur->next, succ);
+        cur = cur->next;
+    }
+
+    return true;
+}
 
 /* Process the differences file in input stream, starting at offset 8 (the
    header has already been read and verified), creating a new block reference
@@ -171,7 +258,7 @@ static void emit_instruction(size_t n, uint16_t C, uint16_t A)
     }
 }
 
-static void generate_output()
+static bool generate_output()
 {
     size_t n;
     uint16_t C, A;
@@ -227,54 +314,105 @@ static void generate_output()
     {
         write_data(orig_digest, DS);
     }
+
+    return true;
 }
 
 int tardiffmerge(int argc, char *argv[])
 {
-    int n, num_diffs;
+    int num_diffs;
+    struct File *files, *file;
+    bool input_ok, output_ok, order_files;
 
     num_diffs = argc - 1;
-    if (num_diffs > MAX_DIFF_FILES)
+    input_ok = output_ok = false;
+    order_files = true;
+
+    if (strcmp(argv[0], "-f") == 0)
     {
-        fprintf( stderr, "Too many difference files supplied "
-                         "(maximum is %d)!\n", MAX_DIFF_FILES );
-        exit(EXIT_FAILURE);
+        order_files = false;
+        ++argv;
+        --argc;
     }
 
-    /* Open all input files first. */
-    for (n = 0; n < num_diffs; ++n)
+    /* Verify arguments are all diff files: */
+    input_ok = identify_files((const char**)argv, num_diffs, NULL, &files);
+    for (file = files; file != NULL; file = file->next)
     {
-        char magic[MAGIC_LEN];
-
-        is_diff[n] = OpenFileInputStream(argv[n]);
-        if (is_diff[n] == NULL)
+        if (file->type == FILE_INVALID)
         {
-            fprintf(stderr, "Cannot open difference file %d (%s) "
-                            "for reading!\n", n, argv[n] );
-            exit(EXIT_FAILURE);
+            fprintf(stderr, "%s: %s\n", file->path, file->invalid.error);
         }
-        read_data(is_diff[n], magic, MAGIC_LEN);
-        if (memcmp(magic, MAGIC_STR, MAGIC_LEN) != 0)
+        else
+        if (file->type != FILE_DIFF)
         {
-            fprintf(stderr, "File %d (%s) is not a difference file! "
-                            " (invalid magic string)\n", n, argv[n]);
-            exit(EXIT_FAILURE);
+            fprintf(stderr, "%s: not a differences file\n", file->path);
+            input_ok = false;
+        }
+        else  /* file->type == FILE_DIFF */
+        {
+            static uint8_t zero_digest[DS];
+            if (order_files &&
+                memcmp(file->diff.digest1, zero_digest, DS) == 0)
+            {
+                fprintf(stderr,
+                    "ERROR: input contains version 1.0 difference files.\n"
+                    "Merge order cannot be determined automatically.\n");
+                input_ok = false;
+            }
         }
     }
 
-    /* Redirect output (if necessary) */
-    if (strcmp(argv[argc - 1], "-") != 0) redirect_stdout(argv[argc - 1]);
-
-    /* Process input files. */
-    for (n = 0; n < num_diffs; ++n)
+    if (input_ok && order_files)
     {
-        process_input(is_diff[n]);
+        mark_usable(files);
+        if (!order_input(&files))
+        {
+            fprintf(stderr, "ERROR: input files could not be ordered!\n");
+            input_ok = false;
+        }
     }
 
-    /* Generate output */
-    generate_output();
+    if (input_ok)
+    {
+        /* Redirect output (if necessary) */
+        if (strcmp(argv[argc - 1], "-") != 0) redirect_stdout(argv[argc - 1]);
 
-    munmap(last_blocks, last_num_blocks*sizeof(BlockRef));
+        for (file = files; file != NULL; file = file->next)
+        {
+            InputStream *is;
+            char magic[MAGIC_LEN];
 
-    return EXIT_SUCCESS;
+            /* Try to open again */
+            is = OpenFileInputStream(file->path);
+            if (is == NULL)
+            {
+                fprintf(stderr, "%s: could not be opened.\n", file->path);
+                break;
+            }
+
+            /* Verify magic again */
+            read_data(is, magic, MAGIC_LEN);
+            if (memcmp(magic, MAGIC_STR, MAGIC_LEN) != 0)
+            {
+                fprintf(stderr, "%s: not a differences file\n", file->path);
+                is->close(is);
+                break;
+            }
+
+            /* Process entire file */
+            process_input(is);
+            is->close(is);
+        }
+
+        if (file == NULL)
+        {
+            output_ok = generate_output();
+        }
+
+        munmap(last_blocks, last_num_blocks*sizeof(BlockRef));
+    }
+    free_files(files);
+
+    return (input_ok && output_ok) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

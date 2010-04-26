@@ -20,7 +20,7 @@ static void usage_tardiff()
     printf("Usage:\n"
            "\ttardiff <file1> <file2> <diff>\n"
            "\ttardiff (-p|--patch) <file1> <diff> <file2>\n"
-           "\ttardiff (-m|--merge) <diff1> <diff2> [..] <diff>\n"
+           "\ttardiff (-m|--merge) [-f] <diff1> <diff2> [..] <diff>\n"
            "\ttardiff (-i|--info)  <file> [..]\n");
 }
 

@@ -2,16 +2,24 @@ To do:
  - document code
  - verify correct handling of large files (>4GB)
    (The theoretical file size limit is 2TB)
+ - refactor identify.c so printing of verbose data is moved to tardiffinfo.c
+ - current tools do not verify all writes -- they really should!
 
 To fix:
 tardiffinfo:
  - current used-file analysis is O(N^2) while it could be O(N log N)
  - current used-file analysis uses O(N) of stack space
+tardiffmerge:
+ - current used-file analysis is O(N^2) while it could be O(N log N)
 
 Possible new features:
-- add checksum to diff files so their consistency can be verified by tardiffinfo
 - allow tardiffpatch to accept multiple diff files (which are then first merged)
 - efficient seeking in gzip files
 - support for multithreaded processing (useful for multi-core systems)
-- tardiffmerge could automatically re-order arguments for the merge operation to
-  make sense
+
+Possible file format extensions:
+- add checksum to diff files so their consistency can be verified by tardiffinfo
+- store original file name in diff files so it does not have to be specified on
+  the command line
+- it would be nice to be able to read header data without processing the entire
+  file, but how can we do this?
