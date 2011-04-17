@@ -72,7 +72,7 @@ static struct File *find_digest(struct File *files, uint8_t digest[DS])
     return res;
 }
 
-/* Moves the target file to the front of the list:: */
+/* Moves the target file to the front of the list: */
 static struct File *move_to_front(struct File *files, struct File *target)
 {
     struct File *file, *list, **ptr = &list;
