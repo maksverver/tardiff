@@ -22,6 +22,17 @@ static uint16_t C = 0;              /* copy existing blocks*/
 static uint16_t A = 0;              /* append new blocks */
 static char new_blocks[NA][BS];
 
+static int compar_block_info(const void *a_in, const void *b_in)
+{
+    const BlockInfo *a = (const BlockInfo *)a_in;
+    const BlockInfo *b = (const BlockInfo *)b_in;
+    int d = memcmp(a->digest, b->digest, DS);
+    if (d != 0) return d;
+    if (a->index < b->index) return -1;
+    if (a->index > b->index) return +1;
+    return 0;
+}
+
 static void emit_instruction()
 {
     if (C == 0 && A == 0) return;   /* empty instruction */
@@ -53,67 +64,42 @@ static void copy_block(uint32_t index)
     if (C == NC) emit_instruction();
 }
 
-/* Searches for a block in the list of blocks from file 1.
-   If no block has a matching digest, NULL is returned. Otherwise, a pointer
-   is returned to the block with matching index (if it exists) or the lowest
-   index (otherwise).
-*/
+/* Searches the blocks of file 1 for one matching the given `digest' and `index'
+   and returns a pointer to it, if it is found.  If not, a pointer to the first
+   block with matching digest is returned.  If that does not exist either, then
+   NULL is returned. */
 static BlockInfo *lookup(uint8_t digest[DS], size_t index)
 {
-    BlockInfo *lo, *mid, *hi, *first;
+    BlockInfo *lo, *hi;
     int d;
 
-    /* Binary search for first block with digest >= required digest */
+    /* Binary search for an exact match: */
     lo = blocks;
     hi = blocks + nblocks;
     while (lo < hi)
     {
-        mid = lo + (hi - lo)/2;
-        d = memcmp(mid->digest, digest, DS);
-        if (d <  0) lo = mid + 1;
-        if (d >= 0) hi = mid;
+        BlockInfo *p = lo + (hi - lo)/2;
+        d = memcmp(p->digest, digest, DS);
+        if (d == 0 && p->index == index) return p;
+        if (d < 0 || (d == 0 && p->index < index)) lo = p + 1; else hi = p;
     }
 
-    if (lo == blocks + nblocks || memcmp(lo->digest, digest, DS) > 0)
-    {   /* No block with matching digest found */
-        return NULL;
-    }
-
-    first = lo;
-
-    /* Now search for the first block with digest > required digest */
-    lo = hi = first + 1;
-    while (hi < blocks + nblocks)
+    /* No exact match found -- return first possible block instead: */
+    if (index == 0)
     {
-        if (memcmp(hi->digest, digest, DS) > 0) break;
-        hi += hi - first;
-    }
-    if (hi > blocks + nblocks) hi = blocks + nblocks;
-    while (lo < hi)
-    {
-        mid = lo + (hi - lo)/2;
-        d = memcmp(mid->digest, digest, DS);
-        if (d <= 0) lo = mid + 1;
-        if (d >  0) hi = mid;
-    }
-
-    /* All blocks with matching digest are in range [first:lo) */
-    if (index > 0)
-    {
-        /* Binary search for the right index. */
-        hi = lo;
-        lo = first;
-        while (lo < hi)
+        if (lo < blocks + nblocks && memcmp(lo->digest, digest, DS) == 0)
         {
-            mid = lo + (hi - lo)/2;
-            d = memcmp(&mid->index, &index, sizeof(uint32_t));
-            if (d == 0) return mid;
-            if (d < 0) lo = mid + 1;
-            if (d > 0) hi = mid;
+            return lo;
+        }
+        else
+        {
+            return NULL;
         }
     }
-
-    return first;
+    else
+    {
+        return lookup(digest, 0);
+    }
 }
 
 /* Callback called while enumerating over file 1. */
@@ -215,7 +201,7 @@ int tardiff(int argc, char *argv[], const char *flags)
 
     if (strcmp(argv[2], "-") != 0) redirect_stdout(argv[2]);
 
-    bs = BinSort_create(sizeof(BlockInfo), 4096);
+    bs = BinSort_create(sizeof(BlockInfo), 32768, compar_block_info);
     assert(bs != NULL);
 
     /* Scan file 1 and gather block info */

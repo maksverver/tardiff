@@ -2,11 +2,12 @@
 #define BINSORT_H_INCLUDED
 
 typedef struct BinSort BinSort;
+typedef int (*compar_t)(const void *, const void *);
 
 /* Creates a new bin sort object, with the given block size and cache size
    (the latter is specified in number of blocks).
    The data structure returned must be freed with BinSort_destroy. */
-BinSort *BinSort_create(size_t block_size, size_t cache_size);
+BinSort *BinSort_create(size_t block_size, size_t cache_size, compar_t compar);
 
 /* Add a block to be sorted. */
 void BinSort_add(BinSort *bs, const void *data);

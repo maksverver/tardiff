@@ -1,6 +1,5 @@
 To do:
- - in binsort.c: sort using qsort() instead of sucky own implementation
-   and get rid of extra allocated block in cache!
+ - lock stdout before writing, so no two processes can open the same output file
  - in tardiff.c: increase cache size passed to BinSort_create
  - document code
  - verify correct handling of large files (>4GB)

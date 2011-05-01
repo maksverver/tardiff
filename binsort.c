@@ -11,25 +11,26 @@
 
 struct BinSort
 {
-    size_t block_size;      /* Size of each block */
-    size_t cache_size;      /* Cache size (in number of blocks) */
+    size_t   block_size;        /* Size of each block */
+    size_t   cache_size;        /* Cache size (in number of blocks) */
+    compar_t compar;            /* Block comparison funciton */
 
-    size_t nstored;         /* Number of blocks stored in total */
-    size_t ncached;         /* Number of blocks cached */
+    size_t   nstored;           /* Number of blocks stored in total */
+    size_t   ncached;           /* Number of blocks cached */
 
-    char   *cache;          /* Block cache (size: cache_size*block_size) */
+    char     *cache;            /* Block cache (size: cache_size*block_size) */
 
-    int    nfiles;          /* Number of stored files */
-    size_t sizes[NFILES];   /* Temp file sizes (in number of blocks) */
-    FILE   *files[NFILES];  /* Temp file pointers */
+    int      nfiles;            /* Number of stored files */
+    size_t  sizes[NFILES];      /* Temp file sizes (in number of blocks) */
+    FILE     *files[NFILES];    /* Temp file pointers */
 
-    void   *data;           /* mmap()ed data */
+    void     *data;             /* mmap()ed data */
 };
 
 /* Insert block `i' into the sorted sequence of length `n'; indices of existing
    blocks are stored in `order', in decreasing order of block data, so that the
    index of the least block is stored at the end. */
-static void insert_sorted(char *cache, int width, int *order, int n, int i)
+static void insert_sorted(BinSort *bs, int *order, int n, int i)
 {
     int m, lo = 0, hi = n;
 
@@ -38,7 +39,8 @@ static void insert_sorted(char *cache, int width, int *order, int n, int i)
     {
         int mid = (lo + hi)/2;
         int j = order[mid];
-        if (memcmp(cache + j*width, cache + i*width, width) >= 0)
+        if (bs->compar(bs->cache + j*bs->block_size,
+                       bs->cache + i*bs->block_size) >= 0)
         {
             lo = mid + 1;
         }
@@ -55,10 +57,8 @@ static void insert_sorted(char *cache, int width, int *order, int n, int i)
    is used to store blocks during the merge. */
 static void merge_files(BinSort *bs, int k)
 {
-    char *cache   = bs->cache;
     FILE **files  = bs->files + bs->nfiles - k;
     size_t *sizes = bs->sizes + bs->nfiles - k;
-    int width     = bs->block_size;
 
     FILE *dst;
     size_t pos[NWAY_MERGE];
@@ -78,24 +78,24 @@ static void merge_files(BinSort *bs, int k)
         /* Read first block */
         rewind(files[i]);
         assert(sizes[i] > 0);
-        x = fread(cache + i*width, width, 1, files[i]);
+        x = fread(bs->cache + i*bs->block_size, bs->block_size, 1, files[i]);
         assert(x == 1);
         pos[i] = 1;
-        insert_sorted(cache, width, order, n++, i);
+        insert_sorted(bs, order, n++, i);
     }
     while (n > 0)
     {
         /* Write out smallest block: */
         i = order[--n];
-        x = fwrite(cache + i*width, width, 1, dst);
+        x = fwrite(bs->cache + i*bs->block_size, bs->block_size, 1, dst);
         assert(x == 1);
         if (pos[i] < sizes[i])
         {
             /* Read next block: */
-            x = fread(cache + i*width, width, 1, files[i]);
+            x = fread(bs->cache + i*bs->block_size, bs->block_size, 1, files[i]);
             assert(x == 1);
             ++pos[i];
-            insert_sorted(cache, width, order, n++, i);
+            insert_sorted(bs, order, n++, i);
         }
         else
         {
@@ -110,57 +110,6 @@ static void merge_files(BinSort *bs, int k)
     bs->nfiles -= NWAY_MERGE - 1;
 }
 
-/* Quicksorts cached blocks in range [i:j).
-   Pretty poor implementation; should fix this to use qsort() instead. */
-static void sort_cached(BinSort *bs, size_t i, size_t j)
-{
-    size_t k, l, w;
-
-    for (;;)
-    {
-        if (j - i <= 1) break;
-
-        w = bs->block_size;
-        k = i + 1, l = j;       /* pivot=i; unsorted window: [k:l) */
-        while (k < l)
-        {
-            if (memcmp(bs->cache + i*w, bs->cache + k*w, w) >= 0)
-            {
-                /* Pivot is larger or equal; keep element on the left side */
-                k += 1;
-            }
-            else
-            {
-                /* Pivot is smaller; swap element to the right. */
-                l -= 1;
-                memcpy(bs->cache - 1*w, bs->cache + k*w, w);
-                memcpy(bs->cache + k*w, bs->cache + l*w, w);
-                memcpy(bs->cache + l*w, bs->cache - 1*w, w);
-            }
-        }
-
-        if (k > i + 1)
-        {
-            /* Move pivot to the middle */
-            memcpy(bs->cache - 1*w,     bs->cache + i*w,     w);
-            memcpy(bs->cache + i*w,     bs->cache + (k-1)*w, w);
-            memcpy(bs->cache + (k-1)*w, bs->cache - 1*w,     w);
-        }
-
-        /* Unsorted ranges: [i:k-1) [k:j) */
-        if (k - 1 - i < j - k)
-        {
-            sort_cached(bs, i, k - 1);
-            i = k;
-        }
-        else
-        {
-            sort_cached(bs, k, j);
-            j = k - 1;
-        }
-    }
-}
-
 /* Flushes all currently cached blocks to a new file on disk.
    Afterwards, some cached files may be merged. */
 static void flush_cache(BinSort *bs)
@@ -171,7 +120,7 @@ static void flush_cache(BinSort *bs)
     if (bs->ncached == 0) return;
 
     /* Sort cached blocks */
-    sort_cached(bs, 0, bs->ncached);
+    qsort(bs->cache, bs->ncached, bs->block_size, bs->compar);
 
     /* Write cached contents to a temporary file. */
     fp = tmpfile();
@@ -207,20 +156,21 @@ static void flush_and_merge_all(BinSort *bs)
     assert(bs->nstored == bs->sizes[0]);
 }
 
-BinSort *BinSort_create(size_t block_size, size_t cache_size)
+BinSort *BinSort_create(size_t block_size, size_t cache_size, compar_t compar)
 {
     BinSort *bs;
 
     assert(block_size > 0);
     if (cache_size < NWAY_MERGE) cache_size = NWAY_MERGE;
     /* FIXME: check for overflow in malloc below */
-    bs = malloc(sizeof(BinSort) + block_size*(cache_size + 1));
+    bs = malloc(sizeof(BinSort) + block_size*cache_size);
     if (bs == NULL) return NULL;
     bs->block_size = block_size;
     bs->cache_size = cache_size;
+    bs->compar     = compar;
     bs->nstored    = 0;
     bs->ncached    = 0;
-    bs->cache      = (char*)bs + block_size + sizeof(BinSort);
+    bs->cache      = (char*)bs + sizeof(BinSort);
     bs->nfiles     = 0;
     bs->data       = NULL;
     return bs;
