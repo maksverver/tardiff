@@ -1,4 +1,7 @@
 To do:
+ - in binsort.c: do n-way merges instead of iterative 2-way merging.
+ - in binsort.c: sort using qsort() instead of sucky own implementation
+ - in tardiff.c: increase cache size passed to BinSort_create
  - document code
  - verify correct handling of large files (>4GB)
    (The theoretical file size limit is 2TB)
