@@ -2,6 +2,13 @@
 #include "binsort.h"
 #include <sys/mman.h>
 
+/* Defines how many files to merge at the same time. */
+#define NWAY_MERGE 16
+
+/* Maximum number of open files at a time. Since the number of blocks in a
+   patch is limited to 32-bits numbers, this is more than sufficient: */
+#define NFILES (32*NWAY_MERGE)
+
 struct BinSort
 {
     size_t block_size;      /* Size of each block */
@@ -12,76 +19,99 @@ struct BinSort
 
     char   *cache;          /* Block cache (size: cache_size*block_size) */
 
-    int    nfiles;
-    size_t sizes[64];       /* Temp file sizes (in number of blocks) */
-    FILE   *files[64];      /* Temp file pointers */
+    int    nfiles;          /* Number of stored files */
+    size_t sizes[NFILES];   /* Temp file sizes (in number of blocks) */
+    FILE   *files[NFILES];  /* Temp file pointers */
 
     void   *data;           /* mmap()ed data */
 };
 
-static void merge_files(BinSort *bs)
+/* Insert block `i' into the sorted sequence of length `n'; indices of existing
+   blocks are stored in `order', in decreasing order of block data, so that the
+   index of the least block is stored at the end. */
+static void insert_sorted(char *cache, int width, int *order, int n, int i)
 {
-    FILE *f1, *f2, *fp;
-    char *data1, *data2;
-    size_t size1, size2, nx, w;
+    int m, lo = 0, hi = n;
 
-    assert(bs->nfiles >= 2);
-    assert(bs->ncached == 0);
-
-    w = bs->block_size;
-    data1 = bs->cache - w;
-    data2 = bs->cache;
-
-    /* Open target file fp and rewind input files f1 and f2 */
-    fp = tmpfile();
-    assert(fp != NULL);
-    f1 = bs->files[bs->nfiles - 2];
-    f2 = bs->files[bs->nfiles - 1];
-    size1 = bs->sizes[bs->nfiles - 2];
-    size2 = bs->sizes[bs->nfiles - 1];
-    assert(size1 > 0);
-    assert(size2 > 0);
-    rewind(f1);
-    rewind(f2);
-
-    /* Read initial blocks from both files */
-    nx = fread(data1, w, 1, f1);
-    assert(nx == 1);
-    nx = fread(data2, w, 1, f2);
-    assert(nx == 1);
-
-    while (size1 > 0 || size2 > 0)
+    /* binary search for position of insertion */
+    while (lo < hi)
     {
-        if (size2 == 0 || (size1 > 0 && memcmp(data1, data2, w) <= 0))
-        {   /* Copy a block from file 1 */
-            nx = fwrite(data1, w, 1, fp);
-            assert(nx == 1);
-            if(--size1 > 0)
-            {
-                nx = fread(data1, w, 1, f1);
-                assert(nx == 1);
-            }
+        int mid = (lo + hi)/2;
+        int j = order[mid];
+        if (memcmp(cache + j*width, cache + i*width, width) >= 0)
+        {
+            lo = mid + 1;
         }
         else
-        {   /* Copy a block from file 2 */
-            nx = fwrite(data2, w, 1, fp);
-            assert(nx == 1);
-            if (--size2 > 0)
-            {
-                nx = fread(data2, w, 1, f2);
-                assert(nx == 1);
-            }
+        {
+            hi = mid;
+        }
+    }
+    for (m = n; m > lo; --m) order[m] = order[m - 1];
+    order[lo] = i;
+}
+
+/* Merges the last `k' files into one. Cache must be empty, because its memory
+   is used to store blocks during the merge. */
+static void merge_files(BinSort *bs, int k)
+{
+    char *cache   = bs->cache;
+    FILE **files  = bs->files + bs->nfiles - k;
+    size_t *sizes = bs->sizes + bs->nfiles - k;
+    int width     = bs->block_size;
+
+    FILE *dst;
+    size_t pos[NWAY_MERGE];
+    int order[NWAY_MERGE], n;
+    int i, x;
+
+    assert(k <= NWAY_MERGE && k <= bs->nfiles);
+    assert(bs->ncached == 0);
+
+    /* Create destination file: */
+    dst = tmpfile();
+    assert(dst != NULL);
+
+    n = 0;
+    for (i = 0; i < k; ++i)
+    {
+        /* Read first block */
+        rewind(files[i]);
+        assert(sizes[i] > 0);
+        x = fread(cache + i*width, width, 1, files[i]);
+        assert(x == 1);
+        pos[i] = 1;
+        insert_sorted(cache, width, order, n++, i);
+    }
+    while (n > 0)
+    {
+        /* Write out smallest block: */
+        i = order[--n];
+        x = fwrite(cache + i*width, width, 1, dst);
+        assert(x == 1);
+        if (pos[i] < sizes[i])
+        {
+            /* Read next block: */
+            x = fread(cache + i*width, width, 1, files[i]);
+            assert(x == 1);
+            ++pos[i];
+            insert_sorted(cache, width, order, n++, i);
+        }
+        else
+        {
+            fclose(files[i]);
+            files[i] = NULL;
         }
     }
 
-    fclose(f1);
-    fclose(f2);
-
-    bs->files[bs->nfiles - 2] = fp;
-    bs->sizes[bs->nfiles - 2] += bs->sizes[bs->nfiles - 1];
-    bs->nfiles -= 1;
+    /* Store merged file: */
+    files[0] = dst;
+    for (i = 1; i < k; ++i) sizes[0] += sizes[i];
+    bs->nfiles -= NWAY_MERGE - 1;
 }
 
+/* Quicksorts cached blocks in range [i:j).
+   Pretty poor implementation; should fix this to use qsort() instead. */
 static void sort_cached(BinSort *bs, size_t i, size_t j)
 {
     size_t k, l, w;
@@ -131,7 +161,9 @@ static void sort_cached(BinSort *bs, size_t i, size_t j)
     }
 }
 
-static void purge_cached(BinSort *bs)
+/* Flushes all currently cached blocks to a new file on disk.
+   Afterwards, some cached files may be merged. */
+static void flush_cache(BinSort *bs)
 {
     FILE *fp;
     size_t nwritten;
@@ -147,34 +179,48 @@ static void purge_cached(BinSort *bs)
     nwritten = fwrite(bs->cache, bs->block_size, bs->ncached, fp);
     assert(nwritten == bs->ncached);
 
-    assert(bs->nfiles < 64);
+    assert(bs->nfiles < NFILES);
     bs->files[bs->nfiles] = fp;
     bs->sizes[bs->nfiles] = bs->ncached;
 
     bs->ncached = 0;
     bs->nfiles += 1;
 
-    /* Merge files of equal-ish length */
-    while ( bs->nfiles >= 2 &&
-            bs->sizes[bs->nfiles - 1] >= bs->sizes[bs->nfiles - 2] )
+    /* Merge equal-length files: */
+    while ( bs->nfiles >= NWAY_MERGE &&
+            bs->sizes[bs->nfiles - 1] == bs->sizes[bs->nfiles - NWAY_MERGE] )
     {
-        merge_files(bs);
+        merge_files(bs, NWAY_MERGE);
     }
+}
+
+/* Merges all data (whether cached or stored on disk) into a single file. */
+static void flush_and_merge_all(BinSort *bs)
+{
+    flush_cache(bs);
+    assert(bs->nstored > 0);
+    if (bs->nfiles > 1)
+    {
+        while (bs->nfiles > NWAY_MERGE) merge_files(bs, NWAY_MERGE);
+        merge_files(bs, bs->nfiles);
+    }
+    assert(bs->nstored == bs->sizes[0]);
 }
 
 BinSort *BinSort_create(size_t block_size, size_t cache_size)
 {
     BinSort *bs;
 
-    assert(block_size > 0 && cache_size > 0);
+    assert(block_size > 0);
+    if (cache_size < NWAY_MERGE) cache_size = NWAY_MERGE;
     /* FIXME: check for overflow in malloc below */
-    bs = malloc(sizeof(BinSort) + (1 + block_size)*cache_size);
+    bs = malloc(sizeof(BinSort) + block_size*(cache_size + 1));
     if (bs == NULL) return NULL;
     bs->block_size = block_size;
     bs->cache_size = cache_size;
     bs->nstored    = 0;
     bs->ncached    = 0;
-    bs->cache      = (char*)bs + sizeof(BinSort) + block_size;
+    bs->cache      = (char*)bs + block_size + sizeof(BinSort);
     bs->nfiles     = 0;
     bs->data       = NULL;
     return bs;
@@ -183,7 +229,7 @@ BinSort *BinSort_create(size_t block_size, size_t cache_size)
 void BinSort_add(BinSort *bs, const void *data)
 {
     assert(bs->data == NULL);
-    if (bs->ncached == bs->cache_size) purge_cached(bs);
+    if (bs->ncached == bs->cache_size) flush_cache(bs);
     memcpy(bs->cache + bs->block_size * bs->ncached, data, bs->block_size);
     bs->nstored += 1;
     bs->ncached += 1;
@@ -200,8 +246,7 @@ void BinSort_collect(BinSort *bs, void *data)
 
     if (bs->nstored == 0) return;
 
-    purge_cached(bs);
-    while (bs->nfiles > 1) merge_files(bs);
+    flush_and_merge_all(bs);
 
     /* Read file contents into memory. */
     rewind(bs->files[0]);
@@ -213,9 +258,7 @@ void *BinSort_mmap(BinSort *bs)
 {
     if (bs->nstored == 0) return NULL;
 
-    purge_cached(bs);
-    while (bs->nfiles > 1) merge_files(bs);
-    assert(bs->nstored == bs->sizes[0]);
+    flush_and_merge_all(bs);
 
     /* Flushing is necessary here, to ensure no data is buffered in user-space,
        in which case mmap() would not be able to map the entire file into
