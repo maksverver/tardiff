@@ -112,7 +112,10 @@ static char **parse_options(int argc, char *argv[])
     {
         if (argv[i][0] != '-') break;
 
-        /* Recognize -- as indicating end-of-options */
+        /* Recognize "-" as the first file name argument. */
+        if (argv[i][1] == '\0') break;
+        
+        /* Recognize "--" as indicating end-of-options */
         if (strcmp(argv[i], "--") == 0)
         {
             ++i;
