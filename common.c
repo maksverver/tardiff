@@ -7,6 +7,13 @@ typedef struct FileStream
     gzFile file;
 } FileStream;
 
+static bool no_seek(InputStream *is, off_t pos)
+{   /* seeking not supported */
+    (void)is;
+    (void)pos;
+    return false;
+}
+
 static size_t FS_read(FileStream *fs, void *buf, size_t len)
 {
     int res;
@@ -46,7 +53,7 @@ InputStream *OpenFileInputStream(const char *path)
         return NULL;
     }
     fs->is.read  = (void*)FS_read;
-    fs->is.seek  = (void*)FS_seek;
+    fs->is.seek  = gzdirect(file) ? (void*)FS_seek : no_seek;
     fs->is.close = (void*)FS_close;
     fs->file = file;
 
@@ -60,13 +67,6 @@ static size_t stdin_read(InputStream *is, void *buf, size_t len)
     return fread(buf, 1, len, stdin);
 }
 
-static bool stdin_seek(InputStream *is, off_t pos)
-{   /* seeking not supported */
-    (void)is;
-    (void)pos;
-    return false;
-}
-
 static void stdin_close(InputStream *is)
 {   /* keep stdin open until process terminates. */
     (void)is;
@@ -74,7 +74,7 @@ static void stdin_close(InputStream *is)
 
 InputStream *OpenStdinInputStream()
 {
-    static InputStream is = { stdin_read, stdin_seek, stdin_close };
+    static InputStream is = { stdin_read, no_seek, stdin_close };
     return &is;
 }
 
