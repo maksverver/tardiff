@@ -1,6 +1,6 @@
 CFLAGS=-Wall -Wextra -O2 -g
-OBJS=common.o binsort.o identify.o tardiff.o \
-	tarpatch.o tardiffmerge.o tardiffinfo.o main.o
+OBJS=common.o binsort.o patch-forward.o patch-backward.o \
+	identify.o tardiff.o tarpatch.o tardiffmerge.o tardiffinfo.o main.o
 LDLIBS=-lcrypto -lz
 
 all: tardiff

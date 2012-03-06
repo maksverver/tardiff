@@ -139,7 +139,7 @@ static void scan_file(const char *path, void (*callback)(BlockInfo *, char*))
         exit(EXIT_FAILURE);
     }
 
-    for (block.index = 0; true; ++block.index)
+    for (block.index = 0; ; ++block.index)
     {
         if (block.index == 0xffffffffu)
         {

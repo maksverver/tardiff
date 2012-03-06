@@ -182,7 +182,7 @@ static void process_input(InputStream *is)
             offset += BS;
             if (fwrite(&br, sizeof(br), 1, fp) != 1)
             {
-                fprintf(stderr, "Write to temporary file failed!");
+                fprintf(stderr, "Write to temporary file failed!\n");
                 exit(EXIT_FAILURE);
             }
             ++num_blocks;

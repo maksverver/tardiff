@@ -16,7 +16,6 @@ tardiffmerge:
 
 Possible new features:
 - allow tardiffpatch to accept multiple diff files (which are then first merged)
-- efficient seeking in gzip files
 - support for multithreaded processing (useful for multi-core systems)
 
 Possible file format extensions:
@@ -25,3 +24,10 @@ Possible file format extensions:
   the command line
 - it would be nice to be able to read header data without processing the entire
   file, but how can we do this?
+
+Notes to self:
+  - In theory the tools can work with files with more than 0xffffffff blocks
+    as long as seeking only occurs to the first 0xffffffff blocks in the input,
+    but in practice I probably don't want to support this (and at least
+    patch_backward() is broken if block indices do not fit in 32 bits).
+    I should probably document somewhere that files are limited to 2 TB - 512 B.

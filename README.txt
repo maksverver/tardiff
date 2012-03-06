@@ -58,15 +58,14 @@ tardiff <file1> <file2> <diff>
     to standard output.
 
 tarpatch <file1> <diff> <file2>
-    Recreates file 2 with the set of differences given.
+    Recreates file 2 from file 1 and the differences listed by tardiff.
 
-    <diff> may be specified as "-" in which case data is read from standard
-    input. <file2> may be specified as "-" to write to standard output.
+    <file1> or <diff> may be specified as "-" to read from standard input.
+    <file2> may be specified as "-" to write to standard output.
 
-    Note that <file1> must be a file that allows seeking. Therefore, this file
-    cannot be read from standard input. Futhermore, it is recommended that this
-    file is not compressed: seeking in compressed files is possible, but much
-    slower than in uncompressed files.
+    Either <file1> or <file2> must be seekable in order to recreate the output.
+    The fastest (default) mode of operation occurs when <file1> is seekable,
+    which also means that it must not be a compressed file.
 
 tardiffmerge [-f] <diff1> .. <diff2> <diff-output>
     Reads two or more diff files and combines their contents into a single set
@@ -123,15 +122,15 @@ Input files may be compressed with gzip and are decompressed transparently.
 Output files are always uncompressed, but can be compressed on the fly, e.g.:
 
     # Create a gzipped diff file
-    tardiff file1.tar.zg file2.tar.gz - | gzip > tardiff.gz
+    tardiff file1.tar.gz file2.tar.gz - | gzip > tardiff.gz
 
     # Reconstruct gzipped tar file
     tarpatch file1.tar.gz tardiff.gz - | gzip > file2.tar.gz
     # WARNING: using a gzipped input file is slow!
 
 Note that in this case, the recreated compressed file may not be bitwise
-identical to the original compressed file. Also, beware of unintentionally
-overwriting existing files using I/O redirection.
+identical to the original compressed file. Beware of unintentionally
+overwriting existing files using I/O redirection!
 
 
 BUGS/LIMITATIONS

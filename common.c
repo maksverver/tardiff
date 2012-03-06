@@ -80,18 +80,15 @@ InputStream *OpenStdinInputStream()
 
 void redirect_stdout(const char *path)
 {
-    FILE *fp;
-
-    fp = freopen(path, "ab", stdout);
-    if (fp == NULL)
+    if (freopen(path, "r+b", stdout) != NULL)
     {
-        fprintf(stderr, "Cannot not open '%s' for writing!\n", path);
+        fprintf(stderr, "Output file '%s' exists! (Not overwritten.)\n", path);
         exit(1);
     }
 
-    if (ftello(fp) != 0)
+    if (freopen(path, "w+b", stdout) == NULL)
     {
-        fprintf(stderr, "Output file '%s' exists! (Not overwritten.)\n", path);
+        fprintf(stderr, "Cannot not open '%s' for writing!\n", path);
         exit(1);
     }
 }

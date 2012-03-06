@@ -24,7 +24,7 @@ static bool process_diff(InputStream *is, struct File *file,
 
         if (S == 0xffffffffu && C == 0xffffu && A == 0xffffu) break;
 
-        if (C >= 0x8000 || A >= 0x8000)
+        if (C > 0x7fff || A > 0x7fff || (S < 0xffffffffu) != (C > 0))
         {
             *error = "invalid diff data";
             return false;
@@ -83,8 +83,6 @@ static bool process_data(
     MD5_CTX     md5_ctx;
     char        digest_str[2*DS + 1];
     size_t      total = 0;
-
-    (void)error;  /* unused */
 
     /* Compute MD5 hash of contents */
     MD5_Init(&md5_ctx);
