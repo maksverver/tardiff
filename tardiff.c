@@ -64,42 +64,40 @@ static void copy_block(uint32_t index)
     if (C == NC) emit_instruction();
 }
 
-/* Searches the blocks of file 1 for one matching the given `digest' and `index'
-   and returns a pointer to it, if it is found.  If not, a pointer to the first
-   block with matching digest is returned.  If that does not exist either, then
-   NULL is returned. */
-static BlockInfo *lookup(uint8_t digest[DS], size_t index)
+/* Returns a pointer to a block in file 1 matching the given `digest', or NULL
+   if none exist.  If possible, the block returned has index one greater than
+   the last-found block. */
+static BlockInfo *lookup(uint8_t digest[DS])
 {
+    static size_t next_index;
     BlockInfo *lo, *hi;
     int d;
 
-    /* Binary search for an exact match: */
+    /* Binary search for matching block: */
     lo = blocks;
     hi = blocks + nblocks;
     while (lo < hi)
     {
         BlockInfo *p = lo + (hi - lo)/2;
         d = memcmp(p->digest, digest, DS);
-        if (d == 0 && p->index == index) return p;
-        if (d < 0 || (d == 0 && p->index < index)) lo = p + 1; else hi = p;
-    }
-
-    /* No exact match found -- return first possible block instead: */
-    if (index == 0)
-    {
-        if (lo < blocks + nblocks && memcmp(lo->digest, digest, DS) == 0)
+        if (d == 0 && p->index == next_index)
         {
-            return lo;
+            ++next_index;
+            return p;
         }
-        else
-        {
-            return NULL;
-        }
+        if (d < 0 || (d == 0 && p->index < next_index)) lo = p + 1; else hi = p;
     }
-    else
+    if (lo < blocks + nblocks && memcmp(lo->digest, digest, DS) == 0)
     {
-        return lookup(digest, 0);
+        next_index = lo->index + 1;
+        return lo;
     }
+    if (lo > blocks && memcmp((lo - 1)->digest, digest, DS) == 0)
+    {
+        next_index = (lo - 1)->index + 1;
+        return lo - 1;
+    }
+    return NULL;
 }
 
 /* Callback called while enumerating over file 1. */
@@ -115,9 +113,7 @@ static void pass_1_callback(BlockInfo *block, char data[BS])
    wether or not the blocks were found. */
 static void pass_2_callback(BlockInfo *block, char data[BS])
 {
-    BlockInfo *bi;
-
-    bi = lookup(block->digest, (C > 0 && A == 0) ? S + C : 0);
+    BlockInfo *bi = lookup(block->digest);
     if (bi == NULL) append_block(data);
     if (bi != NULL) copy_block(bi->index);
     MD5_Update(&file2_md5_ctx, data, BS);
