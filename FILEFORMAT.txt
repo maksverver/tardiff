@@ -13,10 +13,12 @@ HEADER
     8 bytes magic string: "tardiff0" (no terminating null character!)
 
 Then, a sequence of instructions, each formatted as follows:
-        4 bytes: S (unsigned)
-        2 bytes: C (unsigned)
-        2 bytes: A (unsigned)
+        4 bytes: S
+        2 bytes: C
+        2 bytes: A
     512*A bytes: new block data
+
+    S, C and A are unsigned integers stored in big-endian (network) byte order.
 
     Interpret this as follows:
         if S == 0xffffffff and C == 0xffff and A == 0xffff:
