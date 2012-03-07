@@ -21,7 +21,7 @@ struct BinSort
     char     *cache;            /* Block cache (size: cache_size*block_size) */
 
     int      nfiles;            /* Number of stored files */
-    size_t  sizes[NFILES];      /* Temp file sizes (in number of blocks) */
+    size_t   sizes[NFILES];     /* Temp file sizes (in number of blocks) */
     FILE     *files[NFILES];    /* Temp file pointers */
 
     void     *data;             /* mmap()ed data */
@@ -160,9 +160,8 @@ BinSort *BinSort_create(size_t block_size, size_t cache_size, compar_t compar)
 {
     BinSort *bs;
 
-    assert(block_size > 0);
     if (cache_size < NWAY_MERGE) cache_size = NWAY_MERGE;
-    /* FIXME: check for overflow in malloc below */
+    assert(block_size > 0 && cache_size <= ~sizeof(BinSort)/block_size);
     bs = malloc(sizeof(BinSort) + block_size*cache_size);
     if (bs == NULL) return NULL;
     bs->block_size = block_size;

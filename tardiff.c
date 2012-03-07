@@ -24,8 +24,7 @@ static char new_blocks[NA][BS];
 
 static int compar_block_info(const void *a_in, const void *b_in)
 {
-    const BlockInfo *a = (const BlockInfo *)a_in;
-    const BlockInfo *b = (const BlockInfo *)b_in;
+    const BlockInfo *a = a_in, *b = b_in;
     int d = memcmp(a->digest, b->digest, DS);
     if (d != 0) return d;
     if (a->index < b->index) return -1;
@@ -197,7 +196,7 @@ int tardiff(int argc, char *argv[], const char *flags)
 
     if (strcmp(argv[2], "-") != 0) redirect_stdout(argv[2]);
 
-    bs = BinSort_create(sizeof(BlockInfo), 32768, compar_block_info);
+    bs = BinSort_create(sizeof(BlockInfo), 65536, compar_block_info);
     assert(bs != NULL);
 
     /* Scan file 1 and gather block info */

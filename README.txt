@@ -141,5 +141,5 @@ output) then the generated patch file will be incorrect. This is unlikely to
 occur by accident, but can be done on purpose since hash collisions for MD5 are
 known.
 
-Due to limitations in the diff file format, the size of input files cannot
-exceed 2 terabyte.
+Due to limitations of the differences file format, input files must consist of
+512 blocks and be strictly less than 2 terabytes in size.
